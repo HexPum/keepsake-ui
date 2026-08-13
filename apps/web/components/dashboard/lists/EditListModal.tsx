@@ -9,6 +9,7 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -219,6 +220,11 @@ export function EditListModal({
               <DialogTitle>
                 {isEdit ? t("lists.edit_list") : t("lists.new_list")}
               </DialogTitle>
+              <DialogDescription className="sr-only">
+                {isEdit
+                  ? "Edit list details including name, description, and icon"
+                  : "Create a new list by entering a name, description, and icon"}
+              </DialogDescription>
             </DialogHeader>
             <div className="flex w-full gap-2 py-4">
               <FormField

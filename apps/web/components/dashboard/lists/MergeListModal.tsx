@@ -5,6 +5,7 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -124,6 +125,9 @@ export function MergeListModal({
           <form onSubmit={onSubmit}>
             <DialogHeader>
               <DialogTitle>{t("lists.merge_list")}</DialogTitle>
+              <DialogDescription className="sr-only">
+                Merge one list into another, combining their bookmarks
+              </DialogDescription>
             </DialogHeader>
             <div className="flex w-full gap-2 py-4">
               <span className="inline-flex aspect-square h-10 items-center justify-center rounded border border-input bg-transparent px-2 text-2xl">
