@@ -187,7 +187,15 @@ export default function InviteAcceptForm({ token }: InviteAcceptFormProps) {
         </div>
 
         <Form {...form}>
+          {/* method="post" is the un-hydrated fallback, not the path taken in
+          normal use: handleSubmit preventDefaults once React is attached. Without
+          it the form keeps HTML's default of GET, so a submit landing in the gap
+          between paint and hydration navigates with the token and password as query
+          params, putting the single-use token and password in browser history, access
+          logs and any Referer sent from this page. Posting to the same route re-renders
+          it (200), so the fallback stays harmless. */}
           <form
+            method="post"
             onSubmit={form.handleSubmit(async (value) => {
               try {
                 await acceptInviteMutation.mutateAsync({

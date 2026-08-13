@@ -97,7 +97,15 @@ export default function ForgotPasswordForm() {
         ) : (
           <>
             <Form {...form}>
+              {/* method="post" is the un-hydrated fallback, not the path taken in
+              normal use: handleSubmit preventDefaults once React is attached. Without
+              it the form keeps HTML's default of GET, so a submit landing in the gap
+              between paint and hydration navigates to /forgot-password?email=… —
+              putting the email in browser history, access logs and any Referer
+              sent from this page. Posting to the same route re-renders it (200), so
+              the fallback stays harmless. */}
               <form
+                method="post"
                 onSubmit={form.handleSubmit(onSubmit)}
                 className="space-y-4"
               >
