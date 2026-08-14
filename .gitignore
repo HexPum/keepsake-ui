@@ -81,3 +81,14 @@ jean.json
 # showing up as noise in every `git status`.
 apps/web/AGENTS.md
 apps/web/CLAUDE.md
+
+# Affinity Designer working files and their exports for the mobile redesign.
+# Kept on disk as the design source of truth, but they're multi-megabyte
+# binaries that don't diff usefully and churn on every save. The tracked
+# `design/` handoff (README.md, screenshots, prototype HTML) is what the
+# implementation is actually written against — see the header comment in
+# apps/web/app/dashboard/dense-theme.css.
+design/presets/
+# Affinity writes this next to a document while it's open and removes it on
+# close; it must never be committed or deleted out from under a live session.
+*.af~lock~
