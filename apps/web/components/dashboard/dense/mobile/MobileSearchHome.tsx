@@ -33,8 +33,18 @@ const MobileEmptyQueueHero = dynamic(
   { ssr: false },
 );
 
-type Density = "dense" | "roomy";
 type Filter = "all" | "unread" | "favourites" | string;
+
+/**
+ * A bookmark counts as "unread" only while a summary is actually outstanding.
+ * `summarizationStatus` is `success | failure | pending | skipped | null`, and
+ * `null` means "never queued" — which is every bookmark on a server with no AI
+ * configured, so treating anything-but-success as unread reports "23 items · 23
+ * unread" forever. Same reasoning (and same bug, once) as DenseFilesView's
+ * `unsummarisedCount`. Kept as one predicate so the header count and the
+ * "Unread" filter can no longer drift apart.
+ */
+const isUnread = (b: ZBookmark) => b.summarizationStatus === "pending";
 
 /**
  * The mobile "search()" screen — exact copy of Figma design (QueueScreen),
@@ -51,7 +61,6 @@ export function MobileSearchHome() {
   const [filter, setFilter] = useState<Filter>("all");
   const [swiping, setSwiping] = useState<string | null>(null);
   const [archived, setArchived] = useState<string[]>([]);
-  const [density] = useState<Density>("dense");
 
   const hasQuery = searchQuery.trim().length > 0;
 
@@ -96,33 +105,55 @@ export function MobileSearchHome() {
   const visible = bookmarks.filter((b) => {
     if (archived.includes(b.id)) return false;
     if (filter === "all") return true;
-    if (filter === "unread")
-      return b.summarizationStatus === "pending" ? true : false;
+    if (filter === "unread") return isUnread(b);
     if (filter === "favourites") return b.favourited;
     return b.tags.some((t) => t.name === filter);
   });
 
   const listRef = useRef<HTMLDivElement>(null);
-  const rafRef = useRef<number | null>(null);
 
+  // This whole screen is `sm:hidden`, but it still *mounts* on desktop — so
+  // without a breakpoint guard Lenis would spin a requestAnimationFrame loop
+  // forever, every frame, driving a `display: none` subtree nobody can see.
+  // Bound to the same 640px edge as Tailwind's `sm`, and re-synced on resize
+  // so rotating a tablet across the breakpoint starts/stops it correctly.
   useEffect(() => {
     const el = listRef.current;
     if (!el) return;
-    const lenis = new Lenis({
-      wrapper: el,
-      content: el,
-      duration: 1.1,
-      smoothWheel: true,
-      syncTouch: true,
-    });
-    const raf = (time: number) => {
-      lenis.raf(time);
-      rafRef.current = requestAnimationFrame(raf);
+
+    const mq = window.matchMedia("(max-width: 639.98px)");
+    let lenis: Lenis | null = null;
+    let rafId: number | null = null;
+
+    const start = () => {
+      if (lenis) return;
+      lenis = new Lenis({
+        wrapper: el,
+        content: el,
+        duration: 1.1,
+        smoothWheel: true,
+        syncTouch: true,
+      });
+      const raf = (time: number) => {
+        lenis?.raf(time);
+        rafId = requestAnimationFrame(raf);
+      };
+      rafId = requestAnimationFrame(raf);
     };
-    rafRef.current = requestAnimationFrame(raf);
+
+    const stop = () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = null;
+      lenis?.destroy();
+      lenis = null;
+    };
+
+    const sync = () => (mq.matches ? start() : stop());
+    sync();
+    mq.addEventListener("change", sync);
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-      lenis.destroy();
+      mq.removeEventListener("change", sync);
+      stop();
     };
   }, []);
 
@@ -188,8 +219,8 @@ export function MobileSearchHome() {
         style={{
           display: "flex",
           flexDirection: "column",
-          gap: density === "dense" ? 0 : 10,
-          padding: density === "roomy" ? "0 14px" : 0,
+          gap: 0,
+          padding: 0,
         }}
       >
         {isPending ? (
@@ -221,55 +252,42 @@ export function MobileSearchHome() {
               <div>
                 <span
                   style={{
-                    fontFamily: "var(--mono)",
+                    fontFamily:
+                      'var(--font-k-mono), "IBM Plex Mono", monospace',
                     fontSize: 12,
                     fontWeight: 600,
                     letterSpacing: "0.08em",
-                    color: "var(--text)",
+                    color: "var(--k-fg)",
                   }}
                 >
                   FILES
                 </span>
                 <span
                   style={{
-                    fontFamily: "var(--mono)",
+                    fontFamily:
+                      'var(--font-k-mono), "IBM Plex Mono", monospace',
                     fontSize: 11,
-                    color: "var(--text-faint)",
+                    color: "var(--k-fg-dim)",
                     marginLeft: 10,
                   }}
                 >
-                  {visible.length} items ·{" "}
-                  {
-                    visible.filter((b) => b.summarizationStatus !== "success")
-                      .length
-                  }{" "}
+                  {visible.length} items · {visible.filter(isUnread).length}{" "}
                   unread
                 </span>
               </div>
             </div>
 
             {/* Rows */}
-            {visible.map((b) =>
-              density === "dense" ? (
-                <DenseRow
-                  key={b.id}
-                  bookmark={b}
-                  swiping={swiping === b.id}
-                  onSwipeStart={() => setSwiping(b.id)}
-                  onSwipeEnd={() => setSwiping(null)}
-                  onArchive={() => setArchived((prev) => [...prev, b.id])}
-                />
-              ) : (
-                <RoomyCard
-                  key={b.id}
-                  bookmark={b}
-                  swiping={swiping === b.id}
-                  onSwipeStart={() => setSwiping(b.id)}
-                  onSwipeEnd={() => setSwiping(null)}
-                  onArchive={() => setArchived((prev) => [...prev, b.id])}
-                />
-              ),
-            )}
+            {visible.map((b) => (
+              <DenseRow
+                key={b.id}
+                bookmark={b}
+                swiping={swiping === b.id}
+                onSwipeStart={() => setSwiping(b.id)}
+                onSwipeEnd={() => setSwiping(null)}
+                onArchive={() => setArchived((prev) => [...prev, b.id])}
+              />
+            ))}
 
             {/* Load more */}
             {hasNextPage && (
@@ -311,10 +329,12 @@ function FilterChip({
       style={{
         padding: "5px 12px",
         borderRadius: 20,
-        border: active ? "1px solid var(--accent)" : "1px solid var(--border2)",
-        background: active ? "var(--accent-glow)" : "transparent",
-        color: active ? "var(--accent)" : "var(--text-muted)",
-        fontFamily: "var(--sans)",
+        border: active
+          ? "1px solid var(--k-accent)"
+          : "1px solid var(--k-border-soft)",
+        background: active ? "var(--k-accent-border)" : "transparent",
+        color: active ? "var(--k-accent)" : "var(--k-fg-muted)",
+        fontFamily: 'var(--font-k-sans), "IBM Plex Sans", sans-serif',
         fontSize: 12,
         fontWeight: active ? 500 : 400,
         cursor: "pointer",
@@ -402,7 +422,7 @@ function DenseRow({
         </svg>
         <span
           style={{
-            fontFamily: "var(--mono)",
+            fontFamily: 'var(--font-k-mono), "IBM Plex Mono", monospace',
             fontSize: 9,
             color: "white",
             letterSpacing: "0.06em",
@@ -420,8 +440,8 @@ function DenseRow({
         style={{
           transform: `translateX(${offsetX}px)`,
           transition: swiping ? "none" : "transform 0.25s ease",
-          background: "var(--bg)",
-          borderBottom: "1px solid var(--border)",
+          background: "var(--k-bg)",
+          borderBottom: "1px solid var(--k-border)",
           padding: "14px 20px",
           display: "flex",
           flexDirection: "column",
@@ -436,6 +456,10 @@ function DenseRow({
             <button
               onClick={(e) => {
                 e.preventDefault();
+                // Persist first, then hide locally. `onArchive` only drops the
+                // row from this screen's `archived` array, so on its own the
+                // bookmark came straight back on the next refresh.
+                updateBookmark({ bookmarkId: b.id, archived: true });
                 onArchive();
               }}
               style={{
@@ -444,7 +468,7 @@ function DenseRow({
                 background: "#c05a1f",
                 border: "none",
                 color: "white",
-                fontFamily: "var(--mono)",
+                fontFamily: 'var(--font-k-mono), "IBM Plex Mono", monospace',
                 fontSize: 10,
                 cursor: "pointer",
               }}
@@ -460,10 +484,10 @@ function DenseRow({
               style={{
                 padding: "3px 10px",
                 borderRadius: 6,
-                background: "var(--surface)",
+                background: "var(--k-surface-1)",
                 border: "none",
-                color: "var(--text-muted)",
-                fontFamily: "var(--mono)",
+                color: "var(--k-fg-muted)",
+                fontFamily: 'var(--font-k-mono), "IBM Plex Mono", monospace',
                 fontSize: 10,
                 cursor: "pointer",
               }}
@@ -486,7 +510,7 @@ function DenseRow({
               fontSize: 15,
               fontWeight: 600,
               lineHeight: 1.35,
-              color: "var(--text)",
+              color: "var(--k-fg)",
               flex: 1,
             }}
           >
@@ -518,7 +542,7 @@ function DenseRow({
               <svg
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="var(--accent)"
+                stroke="var(--k-accent)"
                 strokeWidth="1.6"
                 style={{ width: 16, height: 16 }}
               >
@@ -544,8 +568,8 @@ function DenseRow({
             >
               <svg
                 viewBox="0 0 24 24"
-                fill={fav ? "var(--accent)" : "none"}
-                stroke={fav ? "var(--accent)" : "var(--text-faint)"}
+                fill={fav ? "var(--k-accent)" : "none"}
+                stroke={fav ? "var(--k-accent)" : "var(--k-fg-dim)"}
                 strokeWidth="1.6"
                 style={{ width: 16, height: 16 }}
               >
@@ -568,15 +592,15 @@ function DenseRow({
                 width: 6,
                 height: 6,
                 borderRadius: "50%",
-                background: "var(--accent)",
+                background: "var(--k-accent)",
                 animation: "pulse-dot 1.4s ease infinite",
               }}
             />
             <span
               style={{
-                fontFamily: "var(--mono)",
+                fontFamily: 'var(--font-k-mono), "IBM Plex Mono", monospace',
                 fontSize: 10,
-                color: "var(--accent)",
+                color: "var(--k-accent)",
                 letterSpacing: "0.06em",
               }}
             >
@@ -587,7 +611,7 @@ function DenseRow({
           <p
             style={{
               fontSize: 13,
-              color: "var(--text-muted)",
+              color: "var(--k-fg-muted)",
               lineHeight: 1.45,
               margin: 0,
               display: "-webkit-box",
@@ -612,18 +636,18 @@ function DenseRow({
             <>
               <span
                 style={{
-                  fontFamily: "var(--mono)",
+                  fontFamily: 'var(--font-k-mono), "IBM Plex Mono", monospace',
                   fontSize: 11,
-                  color: "var(--text-faint)",
+                  color: "var(--k-fg-dim)",
                 }}
               >
                 {domain}
               </span>
               <span
                 style={{
-                  fontFamily: "var(--mono)",
+                  fontFamily: 'var(--font-k-mono), "IBM Plex Mono", monospace',
                   fontSize: 11,
-                  color: "var(--text-faint)",
+                  color: "var(--k-fg-dim)",
                 }}
               >
                 ·
@@ -634,18 +658,18 @@ function DenseRow({
             <>
               <span
                 style={{
-                  fontFamily: "var(--mono)",
+                  fontFamily: 'var(--font-k-mono), "IBM Plex Mono", monospace',
                   fontSize: 11,
-                  color: "var(--text-faint)",
+                  color: "var(--k-fg-dim)",
                 }}
               >
                 {readingMinutes} min
               </span>
               <span
                 style={{
-                  fontFamily: "var(--mono)",
+                  fontFamily: 'var(--font-k-mono), "IBM Plex Mono", monospace',
                   fontSize: 11,
-                  color: "var(--text-faint)",
+                  color: "var(--k-fg-dim)",
                 }}
               >
                 ·
@@ -656,10 +680,10 @@ function DenseRow({
             <span
               key={t.id}
               style={{
-                fontFamily: "var(--mono)",
+                fontFamily: 'var(--font-k-mono), "IBM Plex Mono", monospace',
                 fontSize: 10,
-                color: "var(--text-faint)",
-                background: "var(--surface)",
+                color: "var(--k-fg-dim)",
+                background: "var(--k-surface-1)",
                 padding: "1px 6px",
                 borderRadius: 4,
               }}
@@ -669,266 +693,14 @@ function DenseRow({
           ))}
           <span
             style={{
-              fontFamily: "var(--mono)",
+              fontFamily: 'var(--font-k-mono), "IBM Plex Mono", monospace',
               fontSize: 11,
-              color: "var(--text-faint)",
+              color: "var(--k-fg-dim)",
               marginLeft: "auto",
             }}
           >
             {formatCompactRelativeTime(b.createdAt)}
           </span>
-        </div>
-      </Link>
-    </div>
-  );
-}
-
-function RoomyCard({
-  bookmark: b,
-  swiping,
-  onSwipeStart,
-  onSwipeEnd,
-}: {
-  bookmark: ZBookmark;
-  swiping: boolean;
-  onSwipeStart: () => void;
-  onSwipeEnd: () => void;
-  onArchive?: () => void;
-}) {
-  const { mutate: updateBookmark } = useUpdateBookmark({});
-  const [touchStartX, setTouchStartX] = useState(0);
-  const [offsetX, setOffsetX] = useState(0);
-  const [fav, setFav] = useState(b.favourited);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStartX(e.touches[0].clientX);
-    onSwipeStart();
-  };
-  const handleTouchMove = (e: React.TouchEvent) => {
-    const dx = e.touches[0].clientX - touchStartX;
-    if (dx < 0) setOffsetX(Math.max(dx, -100));
-  };
-  const handleTouchEnd = () => {
-    if (offsetX < -60) {
-      setOffsetX(-100);
-    } else {
-      setOffsetX(0);
-    }
-    onSwipeEnd();
-  };
-
-  const title = getDenseRowTitle(b);
-  const domain = getDenseRowSource(b);
-  const readingMinutes = estimateReadingTimeMinutes(b.summary);
-  const summary = summaryPreview(b.summary);
-
-  return (
-    <div
-      style={{
-        position: "relative",
-        borderRadius: 14,
-        overflow: "hidden",
-        background: "var(--card)",
-        border: "1px solid var(--border)",
-      }}
-    >
-      <div
-        style={{
-          position: "absolute",
-          right: 0,
-          top: 0,
-          bottom: 0,
-          width: 100,
-          background: "var(--accent-dim)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexDirection: "column",
-          gap: 3,
-          borderRadius: "0 14px 14px 0",
-        }}
-      >
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="white"
-          strokeWidth="1.8"
-          style={{ width: 20, height: 20 }}
-        >
-          <polyline points="3 6 5 6 21 6" />
-          <path d="M19 6l-1 14H6L5 6" />
-        </svg>
-        <span
-          style={{
-            fontFamily: "var(--mono)",
-            fontSize: 10,
-            color: "white",
-            fontWeight: 600,
-            letterSpacing: "0.06em",
-          }}
-        >
-          ARCHIVE
-        </span>
-      </div>
-
-      <Link
-        href={`/dashboard/preview/${b.id}`}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        style={{
-          transform: `translateX(${offsetX}px)`,
-          transition: swiping ? "none" : "transform 0.25s ease",
-          background: "var(--card)",
-          padding: "16px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-          textDecoration: "none",
-          color: "inherit",
-          cursor: "pointer",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          {domain && (
-            <span
-              style={{
-                fontFamily: "var(--mono)",
-                fontSize: 10,
-                color: "var(--text-faint)",
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-              }}
-            >
-              {domain}
-            </span>
-          )}
-          {readingMinutes && (
-            <span
-              style={{
-                fontFamily: "var(--mono)",
-                fontSize: 10,
-                color: "var(--text-faint)",
-              }}
-            >
-              {readingMinutes} min
-            </span>
-          )}
-        </div>
-        <h3
-          style={{
-            fontSize: 17,
-            fontWeight: 700,
-            lineHeight: 1.3,
-            margin: 0,
-            color: "var(--text)",
-          }}
-        >
-          {title}
-        </h3>
-        {b.summarizationStatus === "pending" ? (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <div
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: "50%",
-                background: "var(--accent)",
-                animation: "pulse-dot 1.4s ease infinite",
-              }}
-            />
-            <span
-              style={{
-                fontFamily: "var(--mono)",
-                fontSize: 10,
-                color: "var(--accent)",
-                letterSpacing: "0.06em",
-              }}
-            >
-              SUMMARISING
-            </span>
-          </div>
-        ) : (
-          <p
-            style={{
-              fontSize: 13.5,
-              color: "var(--text-muted)",
-              lineHeight: 1.5,
-              margin: 0,
-            }}
-          >
-            {summary}
-          </p>
-        )}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            flexWrap: "wrap",
-          }}
-          role="group"
-          onClick={(e) => e.preventDefault()}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-            }
-          }}
-        >
-          {b.tags.map((t) => (
-            <span
-              key={t.id}
-              style={{
-                fontFamily: "var(--mono)",
-                fontSize: 10,
-                color: "var(--text-faint)",
-                background: "var(--surface)",
-                padding: "2px 8px",
-                borderRadius: 5,
-              }}
-            >
-              {t.name}
-            </span>
-          ))}
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              setFav(!fav);
-              updateBookmark({
-                bookmarkId: b.id,
-                favourited: !fav,
-              });
-            }}
-            style={{
-              border: "none",
-              background: "none",
-              cursor: "pointer",
-              padding: 2,
-              marginLeft: "auto",
-            }}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill={fav ? "var(--accent)" : "none"}
-              stroke={fav ? "var(--accent)" : "var(--text-faint)"}
-              strokeWidth="1.6"
-              style={{ width: 17, height: 17 }}
-            >
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-            </svg>
-          </button>
         </div>
       </Link>
     </div>

@@ -206,3 +206,30 @@ body > [role="dialog"] ::selection {
 .k-dense .font-k-mono {
   font-family: var(--font-k-mono), "IBM Plex Mono", monospace;
 }
+
+/*
+ * Referenced by inline `animation` styles in the mobile screens
+ * (MobileSearchHome's "SUMMARISING" indicator, MobileBrowse's staggered
+ * row entrance) — undefined keyframe names no-op silently rather than
+ * erroring, so these need to actually exist for those animations to run.
+ */
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

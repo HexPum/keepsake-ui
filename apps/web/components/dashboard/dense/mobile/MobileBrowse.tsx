@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { EditListModal } from "@/components/dashboard/lists/EditListModal";
 import { useQuery } from "@tanstack/react-query";
 
 import { useBookmarkLists } from "@karakeep/shared-react/hooks/lists";
@@ -15,7 +16,7 @@ import { useTRPC } from "@karakeep/shared-react/trpc";
  */
 export function MobileBrowse() {
   const api = useTRPC();
-  const [expandedListId, setExpandedListId] = useState<string | null>(null);
+  const [isNewListOpen, setIsNewListOpen] = useState(false);
 
   const { data: listsData } = useBookmarkLists();
   const { data: listStats } = useQuery(api.lists.stats.queryOptions());
@@ -33,8 +34,16 @@ export function MobileBrowse() {
     "#b8a87e",
     "#7eabd8",
   ];
+  // Index by the first *code point*, not the first UTF-16 code unit. Every
+  // emoji outside the BMP (📁 🚀 📚 📌 …) is a surrogate pair whose
+  // charCodeAt(0) is the shared high surrogate — 55356 or 55357 — so all of
+  // them collapsed onto just two of the six colours. Spreading the string
+  // iterates code points, and the `undefined` guard covers an empty icon,
+  // which previously indexed with NaN and produced a transparent dot.
   const getListColor = (icon: string): string => {
-    return listColors[Math.abs(icon.charCodeAt(0) % listColors.length)];
+    const codePoint = [...icon][0]?.codePointAt(0);
+    if (codePoint === undefined) return listColors[0];
+    return listColors[codePoint % listColors.length];
   };
 
   return (
@@ -49,7 +58,7 @@ export function MobileBrowse() {
       >
         <span
           style={{
-            fontFamily: "var(--mono)",
+            fontFamily: 'var(--font-k-mono), "IBM Plex Mono", monospace',
             fontSize: 12,
             fontWeight: 600,
             letterSpacing: "0.08em",
@@ -59,9 +68,9 @@ export function MobileBrowse() {
         </span>
         <span
           style={{
-            fontFamily: "var(--mono)",
+            fontFamily: 'var(--font-k-mono), "IBM Plex Mono", monospace',
             fontSize: 11,
-            color: "var(--text-faint)",
+            color: "var(--k-fg-dim)",
           }}
         >
           {!isPending ? `${lists.length} active` : ""}
@@ -78,8 +87,8 @@ export function MobileBrowse() {
                   alignItems: "center",
                   gap: 14,
                   padding: "16px 20px",
-                  background: "var(--surface-1)",
-                  borderBottom: "1px solid var(--border)",
+                  background: "var(--k-surface-1)",
+                  borderBottom: "1px solid var(--k-border)",
                   animation: `fadeIn 0.2s ease ${i * 0.05}s both`,
                 }}
               >
@@ -88,14 +97,14 @@ export function MobileBrowse() {
                     width: 10,
                     height: 10,
                     borderRadius: "50%",
-                    background: "var(--border)",
+                    background: "var(--k-border)",
                     flexShrink: 0,
                   }}
                 />
                 <div
                   style={{
                     height: 4,
-                    background: "var(--border)",
+                    background: "var(--k-border)",
                     borderRadius: 2,
                     flex: 1,
                   }}
@@ -106,23 +115,14 @@ export function MobileBrowse() {
               <Link
                 key={list.id}
                 href={`/dashboard/lists/${list.id}`}
-                onClick={(e) => {
-                  e.preventDefault();
-                  setExpandedListId(
-                    expandedListId === list.id ? null : list.id,
-                  );
-                }}
                 style={{
                   display: "flex",
                   alignItems: "center",
                   gap: 14,
                   padding: "16px 20px",
-                  background:
-                    expandedListId === list.id
-                      ? "var(--surface-1)"
-                      : "transparent",
+                  background: "transparent",
                   border: "none",
-                  borderBottom: "1px solid var(--border)",
+                  borderBottom: "1px solid var(--k-border)",
                   cursor: "pointer",
                   textAlign: "left",
                   animation: `fadeIn 0.2s ease ${i * 0.05}s both`,
@@ -142,9 +142,10 @@ export function MobileBrowse() {
                 />
                 <span
                   style={{
-                    fontFamily: "var(--mono)",
+                    fontFamily:
+                      'var(--font-k-mono), "IBM Plex Mono", monospace',
                     fontSize: 14,
-                    color: "var(--text)",
+                    color: "var(--k-fg)",
                     flex: 1,
                   }}
                 >
@@ -152,9 +153,10 @@ export function MobileBrowse() {
                 </span>
                 <span
                   style={{
-                    fontFamily: "var(--mono)",
+                    fontFamily:
+                      'var(--font-k-mono), "IBM Plex Mono", monospace',
                     fontSize: 12,
-                    color: "var(--text-faint)",
+                    color: "var(--k-fg-dim)",
                   }}
                 >
                   {(listStats?.stats.get(list.id) ?? 0).toLocaleString()}
@@ -162,15 +164,9 @@ export function MobileBrowse() {
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="var(--text-faint)"
+                  stroke="var(--k-fg-dim)"
                   strokeWidth="1.6"
-                  style={{
-                    width: 14,
-                    height: 14,
-                    transform:
-                      expandedListId === list.id ? "rotate(90deg)" : "none",
-                    transition: "transform 0.15s",
-                  }}
+                  style={{ width: 14, height: 14 }}
                 >
                   <polyline points="9 18 15 12 9 6" />
                 </svg>
@@ -179,24 +175,32 @@ export function MobileBrowse() {
       </div>
 
       <div style={{ padding: "24px 20px 0" }}>
+        {/* Driven by `open`/`setOpen` rather than by wrapping the button in
+            EditListModal's own DialogTrigger: passing no children means it
+            renders no trigger at all, which keeps this off the
+            `DialogTrigger asChild` → Slot path that the desktop "New List"
+            button currently hydrates badly on. */}
+        <EditListModal open={isNewListOpen} setOpen={setIsNewListOpen} />
         <button
+          type="button"
+          onClick={() => setIsNewListOpen(true)}
           style={{
             display: "flex",
             alignItems: "center",
             gap: 10,
             padding: "13px 16px",
-            background: "var(--surface-1)",
-            border: "1px dashed var(--border2)",
+            background: "var(--k-surface-1)",
+            border: "1px dashed var(--k-border-soft)",
             borderRadius: 12,
             cursor: "pointer",
             width: "100%",
-            color: "var(--text-muted)",
+            color: "var(--k-fg-muted)",
           }}
         >
           <svg
             viewBox="0 0 24 24"
             fill="none"
-            stroke="var(--accent)"
+            stroke="var(--k-accent)"
             strokeWidth="1.8"
             style={{ width: 16, height: 16 }}
           >
@@ -205,9 +209,9 @@ export function MobileBrowse() {
           </svg>
           <span
             style={{
-              fontFamily: "var(--mono)",
+              fontFamily: 'var(--font-k-mono), "IBM Plex Mono", monospace',
               fontSize: 12,
-              color: "var(--text-muted)",
+              color: "var(--k-fg-muted)",
             }}
           >
             new_list
