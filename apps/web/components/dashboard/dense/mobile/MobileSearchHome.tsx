@@ -98,10 +98,7 @@ export function MobileSearchHome() {
     if (archived.includes(b.id)) return false;
     if (filter === "all") return true;
     if (filter === "unread")
-      return b.summarizationStatus === "pending" ||
-        b.summarizationStatus === "failed"
-        ? false
-        : true;
+      return b.summarizationStatus === "pending" ? true : false;
     if (filter === "favourites") return b.favourited;
     return b.tags.some((t) => t.name === filter);
   });
@@ -549,52 +546,32 @@ function DenseRow({
         </div>
 
         {b.summarizationStatus === "pending" ? (
-          <div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                marginBottom: 6,
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: "var(--accent)",
+                animation: "pulse-dot 1.4s ease infinite",
               }}
-            >
-              <div
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background: "var(--accent)",
-                  animation: "pulse-dot 1.4s ease infinite",
-                }}
-              />
-              <span
-                style={{
-                  fontFamily: "var(--mono)",
-                  fontSize: 10,
-                  color: "var(--accent)",
-                  letterSpacing: "0.06em",
-                }}
-              >
-                SUMMARISING
-              </span>
-            </div>
-            <div
+            />
+            <span
               style={{
-                height: 3,
-                borderRadius: 2,
-                background: "var(--surface)",
-                overflow: "hidden",
+                fontFamily: "var(--mono)",
+                fontSize: 10,
+                color: "var(--accent)",
+                letterSpacing: "0.06em",
               }}
             >
-              <div
-                style={{
-                  height: "100%",
-                  width: `${(b.progress || 0) * 100}%`,
-                  background: "var(--accent)",
-                  borderRadius: 2,
-                }}
-              />
-            </div>
+              SUMMARISING
+            </span>
           </div>
         ) : summary ? (
           <p
@@ -850,51 +827,32 @@ function RoomyCard({
           {title}
         </h3>
         {b.summarizationStatus === "pending" ? (
-          <div>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                marginBottom: 8,
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: "var(--accent)",
+                animation: "pulse-dot 1.4s ease infinite",
               }}
-            >
-              <div
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background: "var(--accent)",
-                  animation: "pulse-dot 1.4s ease infinite",
-                }}
-              />
-              <span
-                style={{
-                  fontFamily: "var(--mono)",
-                  fontSize: 10,
-                  color: "var(--accent)",
-                  letterSpacing: "0.06em",
-                }}
-              >
-                SUMMARISING
-              </span>
-            </div>
-            <div
+            />
+            <span
               style={{
-                height: 4,
-                borderRadius: 2,
-                background: "var(--surface)",
+                fontFamily: "var(--mono)",
+                fontSize: 10,
+                color: "var(--accent)",
+                letterSpacing: "0.06em",
               }}
             >
-              <div
-                style={{
-                  height: "100%",
-                  width: `${(b.progress || 0) * 100}%`,
-                  background: "var(--accent)",
-                  borderRadius: 2,
-                }}
-              />
-            </div>
+              SUMMARISING
+            </span>
           </div>
         ) : (
           <p
