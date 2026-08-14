@@ -2,28 +2,30 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { DenseBookmarkRow } from "@/components/dashboard/dense/DenseBookmarkRow";
+import Link from "next/link";
 import {
   useBookmarkSearch,
   useBookmarkSearchState,
   useDoBookmarkSearch,
 } from "@/lib/hooks/bookmark-search";
+import {
+  getDenseRowSource,
+  getDenseRowTitle,
+} from "@/lib/dense/bookmarkDisplay";
+import {
+  estimateReadingTimeMinutes,
+  formatCompactRelativeTime,
+} from "@/lib/dense/format";
+import { summaryPreview } from "@/lib/dense/summary";
 import { cn } from "@/lib/utils";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { gsap } from "gsap";
 import Lenis from "lenis";
-import { Search } from "lucide-react";
 
+import { useUpdateBookmark } from "@karakeep/shared-react/hooks/bookmarks";
 import { useTRPC } from "@karakeep/shared-react/trpc";
+import { ZBookmark } from "@karakeep/shared/types/bookmarks";
 
-/**
- * Lazy: this pulls in `three` (~365KB minified) for its Vanta field, and
- * only the empty-queue state ever renders it. Statically importing it put
- * `three` in this route's shared bundle for *every* visitor — including
- * desktop, which never renders this component at all, and including the
- * overwhelmingly common case of a queue that isn't empty. `ssr: false`
- * because the effect it exists to run is canvas/WebGL-only anyway.
- */
 const MobileEmptyQueueHero = dynamic(
   () =>
     import("@/components/dashboard/dense/mobile/MobileEmptyQueueHero").then(
@@ -32,62 +34,33 @@ const MobileEmptyQueueHero = dynamic(
   { ssr: false },
 );
 
-/**
- * The mobile "search()" screen (design/Keepsake Mobile Designs.html,
- * screen 2b) — search doubles as home: an empty query shows the plain
- * queue (same `{ archived: false }` query the desktop Files page uses),
- * typing turns the same screen into retrieval via the existing search
- * infrastructure (`useBookmarkSearch`, `useDoBookmarkSearch` — the same
- * hooks the desktop search page already uses, so this is one more
- * consumer of them, not a parallel search implementation).
- *
- * Rendered alongside the desktop `SearchComp` on the same
- * `/dashboard/search` route, `sm:hidden` — see the page component.
- *
- * Deliberately not built, and not silently faked either:
- * - The design's everything/summaries/tags/archive filter pills don't
- *   correspond to a real filter on `searchBookmarks` today (it takes a
- *   text query and a search mode, not a result-type facet), so building
- *   them would mean either wiring pills that quietly do nothing or
- *   inventing a filter the API can't serve. Left out rather than faked.
- * - Matched-term highlighting: `DenseBookmarkRow` (reused here for both
- *   the queue and search results, inheriting its existing click/selection
- *   fixes) has no notion of match spans, and the search endpoint doesn't
- *   return them. A real feature, not a styling tweak.
- * - `ask_summaries()` — the design's natural-language "ask your summaries
- *   a question" row — is a new AI feature with no existing endpoint
- *   behind it, not a UI decision.
- *
- * The empty-queue state (bookmarks.length === 0 with no active query)
- * renders `MobileEmptyQueueHero` — screen 2e's Vanta field, not a plain
- * message — see that component's own doc comment.
- */
-type StatusFilter = "all" | "archived" | "favourites";
+type Density = "dense" | "roomy";
+type Filter = "all" | "unread" | "favourites" | string;
 
+/**
+ * The mobile "search()" screen — exact copy of Figma design (QueueScreen),
+ * wired to keepsake-ui's backend data. Search doubles as home: an empty
+ * query shows the plain queue, typing retrieves bookmarks via search.
+ *
+ * Rendered on `/dashboard/search` route, `sm:hidden`.
+ */
 export function MobileSearchHome() {
   const api = useTRPC();
   const { searchQuery } = useBookmarkSearchState();
   const { debounceSearch } = useDoBookmarkSearch();
   const [inputValue, setInputValue] = useState(searchQuery);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [activeTags, setActiveTags] = useState<string[]>([]);
+  const [filter, setFilter] = useState<Filter>("all");
+  const [swiping, setSwiping] = useState<string | null>(null);
+  const [archived, setArchived] = useState<string[]>([]);
+  const [density, setDensity] = useState<Density>("dense");
 
   const hasQuery = searchQuery.trim().length > 0;
 
-  // Determine archived filter based on status filter
-  const archivedFilter =
-    statusFilter === "archived"
-      ? true
-      : statusFilter === "all"
-        ? false
-        : undefined;
-  const favouritedFilter = statusFilter === "favourites" ? true : undefined;
-
+  // Queue data (when no search query)
   const queueResult = useInfiniteQuery(
     api.bookmarks.getBookmarks.infiniteQueryOptions(
       {
-        archived: archivedFilter,
-        // favourited filter not yet supported by API, will filter client-side
+        archived: false,
         sortOrder: "desc",
         includeContent: false,
         useCursorV2: true,
@@ -100,53 +73,38 @@ export function MobileSearchHome() {
       },
     ),
   );
-  // Gated: with no query this screen shows the plain queue, so searching
-  // for "" would be pure waste — and on a server with no search backend
-  // configured, a failing request on the app's default landing screen.
+
+  // Search data (when query exists)
   const searchResult = useBookmarkSearch({ enabled: hasQuery });
 
-  const {
-    data,
-    hasNextPage,
-    fetchNextPage,
-    isFetchingNextPage,
-    isPending,
-    error,
-  } = hasQuery
-    ? searchResult
-    : {
-        ...queueResult,
-        isPending: queueResult.isPending,
-        error: queueResult.error,
-      };
+  const { data, hasNextPage, fetchNextPage, isFetchingNextPage, isPending } =
+    hasQuery
+      ? searchResult
+      : {
+          ...queueResult,
+          isPending: queueResult.isPending,
+        };
 
   let bookmarks = data?.pages.flatMap((p) => p.bookmarks) ?? [];
 
-  // Extract all unique tags from bookmarks
+  // Extract tags for filters
   const allTags = Array.from(
     new Set(bookmarks.flatMap((b) => b.tags.map((t) => t.name))),
   );
-  const MAX_VISIBLE_TAGS = 2;
-  const visibleTags = allTags.slice(0, MAX_VISIBLE_TAGS);
-  const overflowCount = Math.max(0, allTags.length - MAX_VISIBLE_TAGS);
+  const filters: Filter[] = ["all", "unread", "favourites", ...allTags];
 
-  // Apply tag filter client-side
-  if (activeTags.length > 0) {
-    bookmarks = bookmarks.filter((b) =>
-      activeTags.some((tag) => b.tags.some((t) => t.name === tag)),
-    );
-  }
-
-  // Apply favourites filter client-side
-  if (favouritedFilter) {
-    bookmarks = bookmarks.filter((b) => b.favourited);
-  }
-
-  const toggleTag = (tag: string) => {
-    setActiveTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
-    );
-  };
+  // Filter bookmarks
+  const visible = bookmarks.filter((b) => {
+    if (archived.includes(b.id)) return false;
+    if (filter === "all") return true;
+    if (filter === "unread")
+      return b.summarizationStatus === "pending" ||
+        b.summarizationStatus === "failed"
+        ? false
+        : true;
+    if (filter === "favourites") return b.favourited;
+    return b.tags.some((t) => t.name === filter);
+  });
 
   const listRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
@@ -172,84 +130,7 @@ export function MobileSearchHome() {
     };
   }, []);
 
-  // Stagger rows in once per distinct query — not on every background
-  // refetch of the same query (e.g. window refocus), which would replay
-  // the animation over rows already on screen.
-  const lastStaggeredQueryRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (isPending || !bookmarks.length || !listRef.current) return;
-    if (lastStaggeredQueryRef.current === searchQuery) return;
-    lastStaggeredQueryRef.current = searchQuery;
-    const rows = listRef.current.querySelectorAll("[data-mobile-row]");
-    if (!rows.length) return;
-    gsap.from(rows, {
-      y: 18,
-      opacity: 0,
-      duration: 0.55,
-      stagger: 0.07,
-      ease: "power3.out",
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPending, bookmarks.length, searchQuery]);
-
-  if (error) throw error;
-
   const isEmptyQueue = !hasQuery && bookmarks.length === 0;
-
-  let listBody: React.ReactNode;
-  if (isPending) {
-    listBody = (
-      <div className="flex flex-col gap-[6px] px-[18px] pt-[13px]">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="flex flex-col gap-[6px] pb-[13px]">
-            <div className="bg-k-border h-3 w-3/4 rounded-[3px]" />
-            <div className="bg-k-border h-2 w-full rounded-[3px]" />
-          </div>
-        ))}
-      </div>
-    );
-  } else if (bookmarks.length === 0) {
-    // Design screen 2e's Vanta hero is specifically for the empty
-    // *queue* — a plain "no matches" line covers the other empty case
-    // (a search that found nothing), which isn't what that screen means.
-    listBody = isEmptyQueue ? (
-      <MobileEmptyQueueHero />
-    ) : (
-      <div className="text-k-fg-dim px-[18px] pt-[40px] text-center text-[13px]">
-        No matches.
-      </div>
-    );
-  } else {
-    listBody = (
-      <>
-        {bookmarks.map((bookmark) => (
-          <div key={bookmark.id} data-mobile-row>
-            <DenseBookmarkRow bookmark={bookmark} />
-          </div>
-        ))}
-        {hasNextPage ? (
-          <button
-            type="button"
-            onClick={() => fetchNextPage()}
-            disabled={isFetchingNextPage}
-            className="font-k-mono text-k-fg-dim w-full py-[16px] text-center text-[10.5px] disabled:opacity-50"
-          >
-            {isFetchingNextPage ? "// loading…" : "// load more"}
-          </button>
-        ) : (
-          <div className="font-k-mono text-k-fg-dim px-[16px] py-[16px] text-center text-[10.5px]">
-            {"// end_of_results"}
-          </div>
-        )}
-      </>
-    );
-  }
-
-  const statusFilters: { id: StatusFilter; label: string }[] = [
-    { id: "all", label: "All" },
-    { id: "archived", label: "Archived" },
-    { id: "favourites", label: "Favourites" },
-  ];
 
   return (
     <div className="flex h-full flex-col sm:hidden">
@@ -261,110 +142,825 @@ export function MobileSearchHome() {
             inputValue && "border-k-accent",
           )}
         >
-          <Search
-            size={16}
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.9"
             className="text-k-accent flex-none"
-            strokeWidth={1.9}
-          />
+            style={{ width: 16, height: 16 }}
+          >
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.35-4.35" />
+          </svg>
           <input
             value={inputValue}
             onChange={(e) => {
               setInputValue(e.target.value);
               debounceSearch(e.target.value);
             }}
-            placeholder="Search titles, summaries, tags"
+            placeholder="Search…"
             className="text-k-fg placeholder:text-k-fg-dim min-w-0 flex-1 bg-transparent text-[14px] outline-none"
           />
-          {/* Sort/filter icon — three lines decreasing */}
-          <button
-            type="button"
-            aria-label="Filter"
-            className="text-k-fg-dim flex flex-none flex-col gap-[3px] pr-[2px]"
-          >
-            <span className="block h-[1.5px] w-4 rounded-[1px] bg-current" />
-            <span className="block h-[1.5px] w-3 rounded-[1px] bg-current" />
-            <span className="block h-[1.5px] w-2 rounded-[1px] bg-current" />
-          </button>
         </div>
       </div>
 
-      {/* Filter chip bar */}
-      <div className="scrollbar-none flex-none overflow-x-auto px-[14px] pb-[12px]">
-        <div className="flex gap-[6px]">
-          {/* Status filters */}
-          {statusFilters.map(({ id, label }) => {
-            const active = statusFilter === id;
-            return (
+      {/* Filter chips */}
+      <div
+        style={{
+          display: "flex",
+          gap: 6,
+          padding: "0 20px 16px",
+          overflowX: "auto",
+          scrollbarWidth: "none",
+        }}
+      >
+        {filters.map((f) => (
+          <FilterChip
+            key={f}
+            label={f}
+            active={filter === f}
+            onClick={() => setFilter(f)}
+          />
+        ))}
+      </div>
+
+      {/* Content area */}
+      <div
+        ref={listRef}
+        className="min-h-0 flex-1 overflow-y-auto"
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: density === "dense" ? 0 : 10,
+          padding: density === "roomy" ? "0 14px" : 0,
+        }}
+      >
+        {isPending ? (
+          <div className="flex flex-col gap-[6px] px-[18px] pt-[13px]">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex flex-col gap-[6px] pb-[13px]">
+                <div className="bg-k-border h-3 w-3/4 rounded-[3px]" />
+                <div className="bg-k-border h-2 w-full rounded-[3px]" />
+              </div>
+            ))}
+          </div>
+        ) : isEmptyQueue ? (
+          <MobileEmptyQueueHero />
+        ) : visible.length === 0 ? (
+          <div className="text-k-fg-dim px-[18px] pt-[40px] text-center text-[13px]">
+            No matches.
+          </div>
+        ) : (
+          <>
+            {/* Header */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "0 20px 12px",
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    fontFamily: "var(--mono)",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    letterSpacing: "0.08em",
+                    color: "var(--text)",
+                  }}
+                >
+                  FILES
+                </span>
+                <span
+                  style={{
+                    fontFamily: "var(--mono)",
+                    fontSize: 11,
+                    color: "var(--text-faint)",
+                    marginLeft: 10,
+                  }}
+                >
+                  {visible.length} items · {visible.filter((b) => b.summarizationStatus !== "success").length} unread
+                </span>
+              </div>
+            </div>
+
+            {/* Rows */}
+            {visible.map((b) =>
+              density === "dense" ? (
+                <DenseRow
+                  key={b.id}
+                  bookmark={b}
+                  swiping={swiping === b.id}
+                  onSwipeStart={() => setSwiping(b.id)}
+                  onSwipeEnd={() => setSwiping(null)}
+                  onArchive={() => setArchived((prev) => [...prev, b.id])}
+                />
+              ) : (
+                <RoomyCard
+                  key={b.id}
+                  bookmark={b}
+                  swiping={swiping === b.id}
+                  onSwipeStart={() => setSwiping(b.id)}
+                  onSwipeEnd={() => setSwiping(null)}
+                  onArchive={() => setArchived((prev) => [...prev, b.id])}
+                />
+              )
+            )}
+
+            {/* Load more */}
+            {hasNextPage && (
               <button
-                key={id}
-                onClick={() => setStatusFilter(id)}
-                className={cn(
-                  "font-k-sans font-600 flex-none whitespace-nowrap rounded-full px-[13px] py-[5px] text-[13px] transition-all",
-                  active
-                    ? "bg-k-accent text-k-bg"
-                    : "border-k-border-soft text-k-fg-dim hover:border-k-border border",
-                )}
+                type="button"
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+                className="font-k-mono text-k-fg-dim w-full py-[16px] text-center text-[10.5px] disabled:opacity-50"
               >
-                {label}
+                {isFetchingNextPage ? "// loading…" : "// load more"}
               </button>
-            );
-          })}
+            )}
 
-          <span className="font-k-mono text-k-fg-dim flex-none text-[12px]">
-            {"//"}
-          </span>
+            {!hasNextPage && (
+              <div className="font-k-mono text-k-fg-dim px-[16px] py-[16px] text-center text-[10.5px]">
+                {"// end_of_results"}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
-          {/* Tag group label */}
-          <button
-            onClick={() => setActiveTags([])}
-            className="font-k-mono bg-k-accent font-500 text-k-bg flex-none whitespace-nowrap rounded-full px-[11px] py-[5px] text-[12px]"
-          >
-            tags
-          </button>
+function FilterChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const display = label.charAt(0).toUpperCase() + label.slice(1);
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: "5px 12px",
+        borderRadius: 20,
+        border: active ? "1px solid var(--accent)" : "1px solid var(--border2)",
+        background: active ? "var(--accent-glow)" : "transparent",
+        color: active ? "var(--accent)" : "var(--text-muted)",
+        fontFamily: "var(--sans)",
+        fontSize: 12,
+        fontWeight: active ? 500 : 400,
+        cursor: "pointer",
+        whiteSpace: "nowrap",
+        transition: "all 0.15s",
+        flexShrink: 0,
+      }}
+    >
+      {display}
+    </button>
+  );
+}
 
-          <span className="font-k-mono text-k-fg-dim flex-none text-[12px]">
-            :
-          </span>
+function DenseRow({
+  bookmark: b,
+  swiping,
+  onSwipeStart,
+  onSwipeEnd,
+  onArchive,
+}: {
+  bookmark: ZBookmark;
+  swiping: boolean;
+  onSwipeStart: () => void;
+  onSwipeEnd: () => void;
+  onArchive: () => void;
+}) {
+  const { mutate: updateBookmark } = useUpdateBookmark({});
+  const [touchStartX, setTouchStartX] = useState(0);
+  const [offsetX, setOffsetX] = useState(0);
+  const [revealed, setRevealed] = useState(false);
+  const [fav, setFav] = useState(b.favourited);
 
-          {/* Visible tag chips */}
-          {visibleTags.map((tag) => {
-            const active = activeTags.includes(tag);
-            return (
-              <button
-                key={tag}
-                onClick={() => toggleTag(tag)}
-                className={cn(
-                  "font-k-mono flex-none whitespace-nowrap rounded-full px-[11px] py-[5px] text-[12px] transition-all",
-                  active
-                    ? "bg-k-accent font-600 text-k-bg"
-                    : "border-k-border-soft text-k-accent hover:bg-k-accent/10 border",
-                )}
-              >
-                {tag}
-              </button>
-            );
-          })}
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.touches[0].clientX);
+    onSwipeStart();
+  };
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const dx = e.touches[0].clientX - touchStartX;
+    if (dx < 0) setOffsetX(Math.max(dx, -90));
+  };
+  const handleTouchEnd = () => {
+    if (offsetX < -50) {
+      setRevealed(true);
+      setOffsetX(-90);
+    } else {
+      setRevealed(false);
+      setOffsetX(0);
+    }
+    onSwipeEnd();
+  };
 
-          {/* Overflow chip */}
-          {overflowCount > 0 && (
-            <button className="font-k-mono bg-k-accent/10 text-k-accent flex-none whitespace-nowrap rounded-full px-[11px] py-[5px] text-[12px]">
-              +{overflowCount}
+  const title = getDenseRowTitle(b);
+  const domain = getDenseRowSource(b);
+  const readingMinutes = estimateReadingTimeMinutes(b.summary);
+  const summary = summaryPreview(b.summary);
+
+  return (
+    <div style={{ position: "relative", overflow: "hidden" }}>
+      <div
+        style={{
+          position: "absolute",
+          right: 0,
+          top: 0,
+          bottom: 0,
+          width: 90,
+          background: "#c05a1f",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexDirection: "column",
+          gap: 2,
+        }}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="white"
+          strokeWidth="1.8"
+          style={{ width: 18, height: 18 }}
+        >
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6l-1 14H6L5 6" />
+          <path d="M10 11v6M14 11v6" />
+          <path d="M9 6V4h6v2" />
+        </svg>
+        <span
+          style={{
+            fontFamily: "var(--mono)",
+            fontSize: 9,
+            color: "white",
+            letterSpacing: "0.06em",
+          }}
+        >
+          ARCHIVE
+        </span>
+      </div>
+
+      <Link
+        href={`/dashboard/preview/${b.id}`}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={{
+          transform: `translateX(${offsetX}px)`,
+          transition: swiping ? "none" : "transform 0.25s ease",
+          background: "var(--bg)",
+          borderBottom: "1px solid var(--border)",
+          padding: "14px 20px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 5,
+          textDecoration: "none",
+          color: "inherit",
+          cursor: "pointer",
+        }}
+      >
+        {revealed && (
+          <div style={{ display: "flex", gap: 8, marginBottom: 2 }}>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                onArchive();
+              }}
+              style={{
+                padding: "3px 10px",
+                borderRadius: 6,
+                background: "#c05a1f",
+                border: "none",
+                color: "white",
+                fontFamily: "var(--mono)",
+                fontSize: 10,
+                cursor: "pointer",
+              }}
+            >
+              archive
             </button>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                setRevealed(false);
+                setOffsetX(0);
+              }}
+              style={{
+                padding: "3px 10px",
+                borderRadius: 6,
+                background: "var(--surface)",
+                border: "none",
+                color: "var(--text-muted)",
+                fontFamily: "var(--mono)",
+                fontSize: 10,
+                cursor: "pointer",
+              }}
+            >
+              cancel
+            </button>
+          </div>
+        )}
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 10,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 15,
+              fontWeight: 600,
+              lineHeight: 1.35,
+              color: "var(--text)",
+              flex: 1,
+            }}
+          >
+            {title}
+          </span>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexShrink: 0,
+              paddingTop: 2,
+            }}
+            onClick={(e) => e.preventDefault()}
+          >
+            <button
+              style={{
+                border: "none",
+                background: "none",
+                cursor: "pointer",
+                padding: 2,
+              }}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="var(--accent)"
+                strokeWidth="1.6"
+                style={{ width: 16, height: 16 }}
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+            </button>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                setFav(!fav);
+                updateBookmark({
+                  bookmarkId: b.id,
+                  favourited: !fav,
+                });
+              }}
+              style={{
+                border: "none",
+                background: "none",
+                cursor: "pointer",
+                padding: 2,
+              }}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill={fav ? "var(--accent)" : "none"}
+                stroke={fav ? "var(--accent)" : "var(--text-faint)"}
+                strokeWidth="1.6"
+                style={{ width: 16, height: 16 }}
+              >
+                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {b.summarizationStatus === "pending" ? (
+          <div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                marginBottom: 6,
+              }}
+            >
+              <div
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: "var(--accent)",
+                  animation: "pulse-dot 1.4s ease infinite",
+                }}
+              />
+              <span
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 10,
+                  color: "var(--accent)",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                SUMMARISING
+              </span>
+            </div>
+            <div
+              style={{
+                height: 3,
+                borderRadius: 2,
+                background: "var(--surface)",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width: `${(b.progress || 0) * 100}%`,
+                  background: "var(--accent)",
+                  borderRadius: 2,
+                }}
+              />
+            </div>
+          </div>
+        ) : summary ? (
+          <p
+            style={{
+              fontSize: 13,
+              color: "var(--text-muted)",
+              lineHeight: 1.45,
+              margin: 0,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+          >
+            {summary}
+          </p>
+        ) : null}
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginTop: 2,
+          }}
+        >
+          {domain && (
+            <>
+              <span
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 11,
+                  color: "var(--text-faint)",
+                }}
+              >
+                {domain}
+              </span>
+              <span
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 11,
+                  color: "var(--text-faint)",
+                }}
+              >
+                ·
+              </span>
+            </>
+          )}
+          {readingMinutes && (
+            <>
+              <span
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 11,
+                  color: "var(--text-faint)",
+                }}
+              >
+                {readingMinutes} min
+              </span>
+              <span
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 11,
+                  color: "var(--text-faint)",
+                }}
+              >
+                ·
+              </span>
+            </>
+          )}
+          {b.tags.map((t) => (
+            <span
+              key={t.id}
+              style={{
+                fontFamily: "var(--mono)",
+                fontSize: 10,
+                color: "var(--text-faint)",
+                background: "var(--surface)",
+                padding: "1px 6px",
+                borderRadius: 4,
+              }}
+            >
+              {t.name}
+            </span>
+          ))}
+          <span
+            style={{
+              fontFamily: "var(--mono)",
+              fontSize: 11,
+              color: "var(--text-faint)",
+              marginLeft: "auto",
+            }}
+          >
+            {formatCompactRelativeTime(b.createdAt)}
+          </span>
+        </div>
+      </Link>
+    </div>
+  );
+}
+
+function RoomyCard({
+  bookmark: b,
+  swiping,
+  onSwipeStart,
+  onSwipeEnd,
+  onArchive,
+}: {
+  bookmark: ZBookmark;
+  swiping: boolean;
+  onSwipeStart: () => void;
+  onSwipeEnd: () => void;
+  onArchive: () => void;
+}) {
+  const { mutate: updateBookmark } = useUpdateBookmark({});
+  const [touchStartX, setTouchStartX] = useState(0);
+  const [offsetX, setOffsetX] = useState(0);
+  const [revealed, setRevealed] = useState(false);
+  const [fav, setFav] = useState(b.favourited);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.touches[0].clientX);
+    onSwipeStart();
+  };
+  const handleTouchMove = (e: React.TouchEvent) => {
+    const dx = e.touches[0].clientX - touchStartX;
+    if (dx < 0) setOffsetX(Math.max(dx, -100));
+  };
+  const handleTouchEnd = () => {
+    if (offsetX < -60) {
+      setRevealed(true);
+      setOffsetX(-100);
+    } else {
+      setRevealed(false);
+      setOffsetX(0);
+    }
+    onSwipeEnd();
+  };
+
+  const title = getDenseRowTitle(b);
+  const domain = getDenseRowSource(b);
+  const readingMinutes = estimateReadingTimeMinutes(b.summary);
+  const summary = summaryPreview(b.summary);
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        borderRadius: 14,
+        overflow: "hidden",
+        background: "var(--card)",
+        border: "1px solid var(--border)",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          right: 0,
+          top: 0,
+          bottom: 0,
+          width: 100,
+          background: "var(--accent-dim)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexDirection: "column",
+          gap: 3,
+          borderRadius: "0 14px 14px 0",
+        }}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="white"
+          strokeWidth="1.8"
+          style={{ width: 20, height: 20 }}
+        >
+          <polyline points="3 6 5 6 21 6" />
+          <path d="M19 6l-1 14H6L5 6" />
+        </svg>
+        <span
+          style={{
+            fontFamily: "var(--mono)",
+            fontSize: 10,
+            color: "white",
+            fontWeight: 600,
+            letterSpacing: "0.06em",
+          }}
+        >
+          ARCHIVE
+        </span>
+      </div>
+
+      <Link
+        href={`/dashboard/preview/${b.id}`}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        style={{
+          transform: `translateX(${offsetX}px)`,
+          transition: swiping ? "none" : "transform 0.25s ease",
+          background: "var(--card)",
+          padding: "16px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          textDecoration: "none",
+          color: "inherit",
+          cursor: "pointer",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          {domain && (
+            <span
+              style={{
+                fontFamily: "var(--mono)",
+                fontSize: 10,
+                color: "var(--text-faint)",
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+              }}
+            >
+              {domain}
+            </span>
+          )}
+          {readingMinutes && (
+            <span
+              style={{
+                fontFamily: "var(--mono)",
+                fontSize: 10,
+                color: "var(--text-faint)",
+              }}
+            >
+              {readingMinutes} min
+            </span>
           )}
         </div>
-      </div>
-
-      {!isPending && !isEmptyQueue && (
-        <div className="font-k-mono text-k-fg-dim flex-none px-[16px] pb-[6px] text-[10.5px]">
-          {hasQuery
-            ? `// ${bookmarks.length} match${bookmarks.length === 1 ? "" : "es"}`
-            : `// ${bookmarks.length} ${statusFilter === "all" ? "in queue" : statusFilter === "archived" ? "archived" : "favourites"}`}
+        <h3
+          style={{
+            fontSize: 17,
+            fontWeight: 700,
+            lineHeight: 1.3,
+            margin: 0,
+            color: "var(--text)",
+          }}
+        >
+          {title}
+        </h3>
+        {b.summarizationStatus === "pending" ? (
+          <div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                marginBottom: 8,
+              }}
+            >
+              <div
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: "50%",
+                  background: "var(--accent)",
+                  animation: "pulse-dot 1.4s ease infinite",
+                }}
+              />
+              <span
+                style={{
+                  fontFamily: "var(--mono)",
+                  fontSize: 10,
+                  color: "var(--accent)",
+                  letterSpacing: "0.06em",
+                }}
+              >
+                SUMMARISING
+              </span>
+            </div>
+            <div
+              style={{
+                height: 4,
+                borderRadius: 2,
+                background: "var(--surface)",
+              }}
+            >
+              <div
+                style={{
+                  height: "100%",
+                  width: `${(b.progress || 0) * 100}%`,
+                  background: "var(--accent)",
+                  borderRadius: 2,
+                }}
+              />
+            </div>
+          </div>
+        ) : (
+          <p
+            style={{
+              fontSize: 13.5,
+              color: "var(--text-muted)",
+              lineHeight: 1.5,
+              margin: 0,
+            }}
+          >
+            {summary}
+          </p>
+        )}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            flexWrap: "wrap",
+          }}
+          onClick={(e) => e.preventDefault()}
+        >
+          {b.tags.map((t) => (
+            <span
+              key={t.id}
+              style={{
+                fontFamily: "var(--mono)",
+                fontSize: 10,
+                color: "var(--text-faint)",
+                background: "var(--surface)",
+                padding: "2px 8px",
+                borderRadius: 5,
+              }}
+            >
+              {t.name}
+            </span>
+          ))}
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              setFav(!fav);
+              updateBookmark({
+                bookmarkId: b.id,
+                favourited: !fav,
+              });
+            }}
+            style={{
+              border: "none",
+              background: "none",
+              cursor: "pointer",
+              padding: 2,
+              marginLeft: "auto",
+            }}
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill={fav ? "var(--accent)" : "none"}
+              stroke={fav ? "var(--accent)" : "var(--text-faint)"}
+              strokeWidth="1.6"
+              style={{ width: 17, height: 17 }}
+            >
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+          </button>
         </div>
-      )}
-
-      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto">
-        {listBody}
-      </div>
+      </Link>
     </div>
   );
 }
