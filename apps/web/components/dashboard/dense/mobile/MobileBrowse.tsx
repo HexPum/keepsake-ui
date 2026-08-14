@@ -16,7 +16,6 @@ import { useTRPC } from "@karakeep/shared-react/trpc";
 export function MobileBrowse() {
   const api = useTRPC();
   const [expandedListId, setExpandedListId] = useState<string | null>(null);
-  const [newListOpen, setNewListOpen] = useState(false);
 
   const { data: listsData } = useBookmarkLists();
   const { data: listStats } = useQuery(api.lists.stats.queryOptions());
@@ -181,7 +180,6 @@ export function MobileBrowse() {
 
       <div style={{ padding: "24px 20px 0" }}>
         <button
-          onClick={() => setNewListOpen(true)}
           style={{
             display: "flex",
             alignItems: "center",

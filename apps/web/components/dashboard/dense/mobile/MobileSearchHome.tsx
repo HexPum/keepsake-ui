@@ -19,7 +19,6 @@ import {
 import { summaryPreview } from "@/lib/dense/summary";
 import { cn } from "@/lib/utils";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
-import { gsap } from "gsap";
 import Lenis from "lenis";
 
 import { useUpdateBookmark } from "@karakeep/shared-react/hooks/bookmarks";
@@ -52,7 +51,7 @@ export function MobileSearchHome() {
   const [filter, setFilter] = useState<Filter>("all");
   const [swiping, setSwiping] = useState<string | null>(null);
   const [archived, setArchived] = useState<string[]>([]);
-  const [density, setDensity] = useState<Density>("dense");
+  const [density] = useState<Density>("dense");
 
   const hasQuery = searchQuery.trim().length > 0;
 
@@ -495,7 +494,13 @@ function DenseRow({
               flexShrink: 0,
               paddingTop: 2,
             }}
+            role="group"
             onClick={(e) => e.preventDefault()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+              }
+            }}
           >
             <button
               style={{
@@ -678,7 +683,7 @@ function RoomyCard({
   swiping,
   onSwipeStart,
   onSwipeEnd,
-  onArchive,
+  _onArchive,
 }: {
   bookmark: ZBookmark;
   swiping: boolean;
@@ -689,7 +694,6 @@ function RoomyCard({
   const { mutate: updateBookmark } = useUpdateBookmark({});
   const [touchStartX, setTouchStartX] = useState(0);
   const [offsetX, setOffsetX] = useState(0);
-  const [revealed, setRevealed] = useState(false);
   const [fav, setFav] = useState(b.favourited);
 
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -702,10 +706,8 @@ function RoomyCard({
   };
   const handleTouchEnd = () => {
     if (offsetX < -60) {
-      setRevealed(true);
       setOffsetX(-100);
     } else {
-      setRevealed(false);
       setOffsetX(0);
     }
     onSwipeEnd();
@@ -873,7 +875,13 @@ function RoomyCard({
             gap: 6,
             flexWrap: "wrap",
           }}
+          role="group"
           onClick={(e) => e.preventDefault()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+            }
+          }}
         >
           {b.tags.map((t) => (
             <span
