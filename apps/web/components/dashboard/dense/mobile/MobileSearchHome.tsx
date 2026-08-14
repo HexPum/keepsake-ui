@@ -238,7 +238,12 @@ export function MobileSearchHome() {
                     marginLeft: 10,
                   }}
                 >
-                  {visible.length} items · {visible.filter((b) => b.summarizationStatus !== "success").length} unread
+                  {visible.length} items ·{" "}
+                  {
+                    visible.filter((b) => b.summarizationStatus !== "success")
+                      .length
+                  }{" "}
+                  unread
                 </span>
               </div>
             </div>
@@ -263,7 +268,7 @@ export function MobileSearchHome() {
                   onSwipeEnd={() => setSwiping(null)}
                   onArchive={() => setArchived((prev) => [...prev, b.id])}
                 />
-              )
+              ),
             )}
 
             {/* Load more */}
@@ -683,13 +688,12 @@ function RoomyCard({
   swiping,
   onSwipeStart,
   onSwipeEnd,
-  _onArchive,
 }: {
   bookmark: ZBookmark;
   swiping: boolean;
   onSwipeStart: () => void;
   onSwipeEnd: () => void;
-  onArchive: () => void;
+  onArchive?: () => void;
 }) {
   const { mutate: updateBookmark } = useUpdateBookmark({});
   const [touchStartX, setTouchStartX] = useState(0);
