@@ -76,8 +76,8 @@ export function MobileSearchHome() {
 
   // Determine archived filter based on status filter
   const archivedFilter =
-    statusFilter === "archived" ? true : statusFilter === "all" ? false : null;
-  const favouritedFilter = statusFilter === "favourites" ? true : null;
+    statusFilter === "archived" ? true : statusFilter === "all" ? false : undefined;
+  const favouritedFilter = statusFilter === "favourites" ? true : undefined;
 
   const queueResult = useInfiniteQuery(
     api.bookmarks.getBookmarks.infiniteQueryOptions(
