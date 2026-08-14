@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { gsap } from "gsap";
 import Lenis from "lenis";
-import { Search, X } from "lucide-react";
+import { Search } from "lucide-react";
 
 import { useTRPC } from "@karakeep/shared-react/trpc";
 
@@ -62,18 +62,28 @@ const MobileEmptyQueueHero = dynamic(
  * renders `MobileEmptyQueueHero` — screen 2e's Vanta field, not a plain
  * message — see that component's own doc comment.
  */
+type StatusFilter = "all" | "archived" | "favourites";
+
 export function MobileSearchHome() {
   const api = useTRPC();
   const { searchQuery } = useBookmarkSearchState();
   const { debounceSearch } = useDoBookmarkSearch();
   const [inputValue, setInputValue] = useState(searchQuery);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [activeTags, setActiveTags] = useState<string[]>([]);
 
   const hasQuery = searchQuery.trim().length > 0;
+
+  // Determine archived filter based on status filter
+  const archivedFilter =
+    statusFilter === "archived" ? true : statusFilter === "all" ? false : null;
+  const favouritedFilter = statusFilter === "favourites" ? true : null;
 
   const queueResult = useInfiniteQuery(
     api.bookmarks.getBookmarks.infiniteQueryOptions(
       {
-        archived: false,
+        archived: archivedFilter,
+        // favourited filter not yet supported by API, will filter client-side
         sortOrder: "desc",
         includeContent: false,
         useCursorV2: true,
@@ -106,7 +116,35 @@ export function MobileSearchHome() {
         error: queueResult.error,
       };
 
-  const bookmarks = data?.pages.flatMap((p) => p.bookmarks) ?? [];
+  let bookmarks = data?.pages.flatMap((p) => p.bookmarks) ?? [];
+
+  // Extract all unique tags from bookmarks
+  const allTags = Array.from(
+    new Set(bookmarks.flatMap((b) => b.tags.map((t) => t.name))),
+  );
+  const MAX_VISIBLE_TAGS = 2;
+  const visibleTags = allTags.slice(0, MAX_VISIBLE_TAGS);
+  const overflowCount = Math.max(0, allTags.length - MAX_VISIBLE_TAGS);
+
+  // Apply tag filter client-side
+  if (activeTags.length > 0) {
+    bookmarks = bookmarks.filter((b) =>
+      activeTags.some((tag) => b.tags.some((t) => t.name === tag)),
+    );
+  }
+
+  // Apply favourites filter client-side
+  if (favouritedFilter) {
+    bookmarks = bookmarks.filter((b) => b.favourited);
+  }
+
+  const toggleTag = (tag: string) => {
+    setActiveTags((prev) =>
+      prev.includes(tag)
+        ? prev.filter((t) => t !== tag)
+        : [...prev, tag],
+    );
+  };
 
   const listRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
@@ -205,9 +243,16 @@ export function MobileSearchHome() {
     );
   }
 
+  const statusFilters: { id: StatusFilter; label: string }[] = [
+    { id: "all", label: "All" },
+    { id: "archived", label: "Archived" },
+    { id: "favourites", label: "Favourites" },
+  ];
+
   return (
     <div className="flex h-full flex-col sm:hidden">
-      <div className="flex-none px-[16px] pb-[10px] pt-[10px]">
+      {/* Search bar */}
+      <div className="flex-none px-[14px] pb-[10px] pt-[10px]">
         <div
           className={cn(
             "border-k-border bg-k-surface-1 flex h-[40px] items-center gap-[9px] rounded-[11px] border px-[13px]",
@@ -225,20 +270,85 @@ export function MobileSearchHome() {
               setInputValue(e.target.value);
               debounceSearch(e.target.value);
             }}
-            placeholder="Search your queue"
+            placeholder="Search titles, summaries, tags"
             className="text-k-fg placeholder:text-k-fg-dim min-w-0 flex-1 bg-transparent text-[14px] outline-none"
           />
-          {inputValue && (
+          {/* Sort/filter icon — three lines decreasing */}
+          <button
+            type="button"
+            aria-label="Filter"
+            className="text-k-fg-dim flex-none flex flex-col gap-[3px] pr-[2px]"
+          >
+            <span className="block h-[1.5px] w-4 rounded-[1px] bg-current" />
+            <span className="block h-[1.5px] w-3 rounded-[1px] bg-current" />
+            <span className="block h-[1.5px] w-2 rounded-[1px] bg-current" />
+          </button>
+        </div>
+      </div>
+
+      {/* Filter chip bar */}
+      <div className="flex-none overflow-x-auto px-[14px] pb-[12px] scrollbar-none">
+        <div className="flex gap-[6px]">
+          {/* Status filters */}
+          {statusFilters.map(({ id, label }) => {
+            const active = statusFilter === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setStatusFilter(id)}
+                className={cn(
+                  "font-k-sans flex-none whitespace-nowrap rounded-full px-[13px] py-[5px] text-[13px] font-600 transition-all",
+                  active
+                    ? "bg-k-accent text-k-bg"
+                    : "border border-k-border-soft text-k-fg-dim hover:border-k-border",
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
+
+          <span className="font-k-mono text-k-fg-dim flex-none text-[12px]">
+            {"//"}
+          </span>
+
+          {/* Tag group label */}
+          <button
+            onClick={() => setActiveTags([])}
+            className="font-k-mono flex-none whitespace-nowrap rounded-full bg-k-accent px-[11px] py-[5px] text-[12px] font-500 text-k-bg"
+          >
+            tags
+          </button>
+
+          <span className="font-k-mono text-k-fg-dim flex-none text-[12px]">
+            :
+          </span>
+
+          {/* Visible tag chips */}
+          {visibleTags.map((tag) => {
+            const active = activeTags.includes(tag);
+            return (
+              <button
+                key={tag}
+                onClick={() => toggleTag(tag)}
+                className={cn(
+                  "font-k-mono flex-none whitespace-nowrap rounded-full px-[11px] py-[5px] text-[12px] transition-all",
+                  active
+                    ? "bg-k-accent font-600 text-k-bg"
+                    : "border border-k-border-soft text-k-accent hover:bg-k-accent/10",
+                )}
+              >
+                {tag}
+              </button>
+            );
+          })}
+
+          {/* Overflow chip */}
+          {overflowCount > 0 && (
             <button
-              type="button"
-              aria-label="Clear search"
-              className="text-k-fg-dim flex-none"
-              onClick={() => {
-                setInputValue("");
-                debounceSearch("");
-              }}
+              className="font-k-mono flex-none whitespace-nowrap rounded-full bg-k-accent/10 px-[11px] py-[5px] text-[12px] text-k-accent"
             >
-              <X size={15} strokeWidth={1.8} />
+              +{overflowCount}
             </button>
           )}
         </div>
@@ -248,7 +358,7 @@ export function MobileSearchHome() {
         <div className="font-k-mono text-k-fg-dim flex-none px-[16px] pb-[6px] text-[10.5px]">
           {hasQuery
             ? `// ${bookmarks.length} match${bookmarks.length === 1 ? "" : "es"}`
-            : `// ${bookmarks.length} in queue`}
+            : `// ${bookmarks.length} ${statusFilter === "all" ? "in queue" : statusFilter === "archived" ? "archived" : "favourites"}`}
         </div>
       )}
 
