@@ -76,7 +76,11 @@ export function MobileSearchHome() {
 
   // Determine archived filter based on status filter
   const archivedFilter =
-    statusFilter === "archived" ? true : statusFilter === "all" ? false : undefined;
+    statusFilter === "archived"
+      ? true
+      : statusFilter === "all"
+        ? false
+        : undefined;
   const favouritedFilter = statusFilter === "favourites" ? true : undefined;
 
   const queueResult = useInfiniteQuery(
@@ -140,9 +144,7 @@ export function MobileSearchHome() {
 
   const toggleTag = (tag: string) => {
     setActiveTags((prev) =>
-      prev.includes(tag)
-        ? prev.filter((t) => t !== tag)
-        : [...prev, tag],
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
     );
   };
 
@@ -277,7 +279,7 @@ export function MobileSearchHome() {
           <button
             type="button"
             aria-label="Filter"
-            className="text-k-fg-dim flex-none flex flex-col gap-[3px] pr-[2px]"
+            className="text-k-fg-dim flex flex-none flex-col gap-[3px] pr-[2px]"
           >
             <span className="block h-[1.5px] w-4 rounded-[1px] bg-current" />
             <span className="block h-[1.5px] w-3 rounded-[1px] bg-current" />
@@ -287,7 +289,7 @@ export function MobileSearchHome() {
       </div>
 
       {/* Filter chip bar */}
-      <div className="flex-none overflow-x-auto px-[14px] pb-[12px] scrollbar-none">
+      <div className="scrollbar-none flex-none overflow-x-auto px-[14px] pb-[12px]">
         <div className="flex gap-[6px]">
           {/* Status filters */}
           {statusFilters.map(({ id, label }) => {
@@ -297,10 +299,10 @@ export function MobileSearchHome() {
                 key={id}
                 onClick={() => setStatusFilter(id)}
                 className={cn(
-                  "font-k-sans flex-none whitespace-nowrap rounded-full px-[13px] py-[5px] text-[13px] font-600 transition-all",
+                  "font-k-sans font-600 flex-none whitespace-nowrap rounded-full px-[13px] py-[5px] text-[13px] transition-all",
                   active
                     ? "bg-k-accent text-k-bg"
-                    : "border border-k-border-soft text-k-fg-dim hover:border-k-border",
+                    : "border-k-border-soft text-k-fg-dim hover:border-k-border border",
                 )}
               >
                 {label}
@@ -315,7 +317,7 @@ export function MobileSearchHome() {
           {/* Tag group label */}
           <button
             onClick={() => setActiveTags([])}
-            className="font-k-mono flex-none whitespace-nowrap rounded-full bg-k-accent px-[11px] py-[5px] text-[12px] font-500 text-k-bg"
+            className="font-k-mono bg-k-accent font-500 text-k-bg flex-none whitespace-nowrap rounded-full px-[11px] py-[5px] text-[12px]"
           >
             tags
           </button>
@@ -335,7 +337,7 @@ export function MobileSearchHome() {
                   "font-k-mono flex-none whitespace-nowrap rounded-full px-[11px] py-[5px] text-[12px] transition-all",
                   active
                     ? "bg-k-accent font-600 text-k-bg"
-                    : "border border-k-border-soft text-k-accent hover:bg-k-accent/10",
+                    : "border-k-border-soft text-k-accent hover:bg-k-accent/10 border",
                 )}
               >
                 {tag}
@@ -345,9 +347,7 @@ export function MobileSearchHome() {
 
           {/* Overflow chip */}
           {overflowCount > 0 && (
-            <button
-              className="font-k-mono flex-none whitespace-nowrap rounded-full bg-k-accent/10 px-[11px] py-[5px] text-[12px] text-k-accent"
-            >
+            <button className="font-k-mono bg-k-accent/10 text-k-accent flex-none whitespace-nowrap rounded-full px-[11px] py-[5px] text-[12px]">
               +{overflowCount}
             </button>
           )}

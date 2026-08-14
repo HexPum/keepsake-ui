@@ -57,10 +57,6 @@ export function MobileBrowse() {
     [listsData],
   );
   const tags = (tagsData?.tags ?? []).slice(0, 24);
-  const totalItems = topLevelLists.reduce(
-    (sum, list) => sum + (listStats?.stats.get(list.id) ?? 0),
-    0,
-  );
 
   // Generate a deterministic color for each list based on icon
   const getListColor = (icon: string): string => {
@@ -110,109 +106,111 @@ export function MobileBrowse() {
 
         {/* List rows */}
         <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-          {isPending ? (
-            Array.from({ length: 4 }).map((_, i) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 14,
-                  padding: "16px 20px",
-                  background: "var(--surface-1)",
-                  borderBottom: "1px solid var(--border)",
-                  animation: `fadeIn 0.2s ease ${i * 0.05}s both`,
-                }}
-              >
+          {isPending
+            ? Array.from({ length: 4 }).map((_, i) => (
                 <div
+                  key={i}
                   style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: "50%",
-                    background: "var(--border)",
-                    flexShrink: 0,
-                  }}
-                />
-                <div
-                  style={{
-                    height: 4,
-                    background: "var(--border)",
-                    borderRadius: 2,
-                    flex: 1,
-                  }}
-                />
-              </div>
-            ))
-          ) : topLevelLists.length > 0 ? (
-            topLevelLists.map((list, i) => (
-              <button
-                key={list.id}
-                onClick={() =>
-                  setExpandedListId(
-                    expandedListId === list.id ? null : list.id,
-                  )
-                }
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 14,
-                  padding: "16px 20px",
-                  background:
-                    expandedListId === list.id ? "var(--surface-1)" : "transparent",
-                  border: "none",
-                  borderBottom: "1px solid var(--border)",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  animation: `fadeIn 0.2s ease ${i * 0.05}s both`,
-                  transition: "background 0.15s",
-                }}
-              >
-                <div
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: "50%",
-                    background: getListColor(list.icon),
-                    flexShrink: 0,
-                  }}
-                />
-                <span
-                  style={{
-                    fontFamily: "var(--mono)",
-                    fontSize: 14,
-                    color: "var(--text)",
-                    flex: 1,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 14,
+                    padding: "16px 20px",
+                    background: "var(--surface-1)",
+                    borderBottom: "1px solid var(--border)",
+                    animation: `fadeIn 0.2s ease ${i * 0.05}s both`,
                   }}
                 >
-                  {list.name}
-                </span>
-                <span
-                  style={{
-                    fontFamily: "var(--mono)",
-                    fontSize: 12,
-                    color: "var(--text-faint)",
-                  }}
-                >
-                  {(listStats?.stats.get(list.id) ?? 0).toLocaleString()}
-                </span>
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="var(--text-faint)"
-                  strokeWidth="1.6"
-                  style={{
-                    width: 14,
-                    height: 14,
-                    transform:
-                      expandedListId === list.id ? "rotate(90deg)" : "none",
-                    transition: "transform 0.15s",
-                  }}
-                >
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              </button>
-            ))
-          ) : null}
+                  <div
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: "50%",
+                      background: "var(--border)",
+                      flexShrink: 0,
+                    }}
+                  />
+                  <div
+                    style={{
+                      height: 4,
+                      background: "var(--border)",
+                      borderRadius: 2,
+                      flex: 1,
+                    }}
+                  />
+                </div>
+              ))
+            : topLevelLists.length > 0
+              ? topLevelLists.map((list, i) => (
+                  <button
+                    key={list.id}
+                    onClick={() =>
+                      setExpandedListId(
+                        expandedListId === list.id ? null : list.id,
+                      )
+                    }
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 14,
+                      padding: "16px 20px",
+                      background:
+                        expandedListId === list.id
+                          ? "var(--surface-1)"
+                          : "transparent",
+                      border: "none",
+                      borderBottom: "1px solid var(--border)",
+                      cursor: "pointer",
+                      textAlign: "left",
+                      animation: `fadeIn 0.2s ease ${i * 0.05}s both`,
+                      transition: "background 0.15s",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: "50%",
+                        background: getListColor(list.icon),
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontFamily: "var(--mono)",
+                        fontSize: 14,
+                        color: "var(--text)",
+                        flex: 1,
+                      }}
+                    >
+                      {list.name}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: "var(--mono)",
+                        fontSize: 12,
+                        color: "var(--text-faint)",
+                      }}
+                    >
+                      {(listStats?.stats.get(list.id) ?? 0).toLocaleString()}
+                    </span>
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="var(--text-faint)"
+                      strokeWidth="1.6"
+                      style={{
+                        width: 14,
+                        height: 14,
+                        transform:
+                          expandedListId === list.id ? "rotate(90deg)" : "none",
+                        transition: "transform 0.15s",
+                      }}
+                    >
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </button>
+                ))
+              : null}
         </div>
 
         {/* New list button */}
