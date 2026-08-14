@@ -5,7 +5,7 @@
 // per-bookmark crawl flow (crawlAndParse.ts).
 import { and, eq } from "drizzle-orm";
 import { bookmarkCrawlLatencyHistogram, workerStatsCounter } from "metrics";
-import { getBookmarkDomain, selectRunProxies } from "network";
+import { getBookmarkDomain, getProxyAgent, selectRunProxies } from "network";
 import { withWorkerTracing, withWorkerEventLog } from "workerTracing";
 import { getBookmarkDetails } from "workerUtils";
 
@@ -49,6 +49,7 @@ import {
   crawlAndParseUrl,
   handleAsAssetBookmark,
 } from "./crawler/crawlAndParse";
+import { extractTranscript, isLikelyVideoUrl } from "./crawler/transcript";
 import {
   getContentTypeAndMetadata,
   loadStoredProbeMetadata,
@@ -255,6 +256,53 @@ async function checkDomainRateLimit(url: string, jobId: string): Promise<void> {
         );
       }
     },
+  );
+}
+
+/**
+ * Pulls the spoken content out of a linked video and stores it on the link.
+ *
+ * Runs inline in the crawl rather than as its own queued job, because the
+ * summarisation job is enqueued moments later and needs the transcript to
+ * already be there. Doing it asynchronously would mean either summarising the
+ * empty page first and re-summarising afterwards — the user watching a wrong
+ * summary get replaced — or a completion handshake between two queues for
+ * what is, for a subtitle track, a couple of seconds of work.
+ *
+ * Only touches URLs on known video hosts, and never throws: no failure to find
+ * a transcript should be able to fail the crawl.
+ */
+async function storeVideoTranscript(
+  bookmarkId: string,
+  url: string,
+  runProxy: ReturnType<typeof selectRunProxies>,
+  job: DequeuedJob<ZCrawlLinkRequest>,
+): Promise<void> {
+  const jobId = job.id;
+  if (!serverConfig.crawler.videoTranscript || !isLikelyVideoUrl(url)) {
+    return;
+  }
+
+  const proxy = getProxyAgent(url, runProxy);
+  const transcript = await extractTranscript({
+    url,
+    proxy: proxy?.proxy.toString(),
+    signal: job.abortSignal,
+    jobId,
+  });
+
+  if (!transcript) return;
+
+  await db
+    .update(bookmarkLinks)
+    .set({
+      transcript: transcript.text,
+      transcriptSource: transcript.source,
+    })
+    .where(eq(bookmarkLinks.id, bookmarkId));
+
+  logger.info(
+    `[Crawler][${jobId}] Stored a ${transcript.text.length} char transcript (${transcript.source}) for "${url}".`,
   );
 }
 
@@ -474,6 +522,9 @@ async function runCrawler(
       runProxy,
       probeMetadataPromise,
     });
+
+    // Before the inference jobs are queued, so summarisation sees it.
+    await storeVideoTranscript(bookmarkId, url, runProxy, job);
 
     await enqueuePostCrawlJobs(job, bookmarkId, userId, url);
 

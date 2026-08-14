@@ -8,6 +8,39 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && cargo install monolith --locked
 
+################# Whisper.cpp Builder ##############
+# Speech recognition for video that carries no subtitle track — most notably
+# short-form (Reels, TikTok), where there is no caption track to fetch and the
+# spoken audio is the only description of the content that exists.
+#
+# Built from source because whisper.cpp publishes no official Linux binaries.
+# Statically linked (BUILD_SHARED_LIBS=OFF) so the runtime image needs a single
+# file rather than libwhisper/libggml and their transitive sonames.
+#
+# Only the ~2MB binary ships here; models do not. The useful ones run from
+# 75MB (base) to 3GB (large-v3), the right pick depends entirely on the host's
+# CPU budget, and baking one in would inflate every image for the majority of
+# deployments that leave ASR switched off. Mount a model and point
+# CRAWLER_ASR_MODEL at it. Nothing here runs unless CRAWLER_ASR_ENABLED is set.
+FROM debian:bookworm-slim AS whisper_builder
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y \
+        build-essential \
+        cmake \
+        git \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && git clone --depth 1 https://github.com/ggml-org/whisper.cpp /src \
+    && cmake -B /src/build -S /src \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DWHISPER_BUILD_TESTS=OFF \
+        -DWHISPER_BUILD_SERVER=OFF \
+    && cmake --build /src/build --config Release -j"$(nproc)" \
+    && mkdir -p /out \
+    && cp /src/build/bin/whisper-cli /out/whisper-cli
+
 ################# Base Builder ##############
 # Replace with node:24-slim as soon as https://github.com/nodejs/node/pull/65042 is fixed and uploaded to Docker hub
 FROM node:24.18.1-slim AS base
@@ -145,6 +178,10 @@ RUN echo "--js-runtimes node" > /etc/yt-dlp.conf
 
 # Copy monolith binary from builder
 COPY --from=monolith_builder /usr/local/cargo/bin/monolith /usr/local/bin/monolith
+
+# Copy the whisper.cpp CLI. Inert unless CRAWLER_ASR_ENABLED=true and
+# CRAWLER_ASR_MODEL points at a mounted model file.
+COPY --from=whisper_builder /out/whisper-cli /usr/local/bin/whisper-cli
 
 ######################
 # Prepare the web app

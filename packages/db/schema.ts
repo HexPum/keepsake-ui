@@ -315,6 +315,20 @@ export const bookmarkLinks = sqliteTable(
       ZReaderViewReason[]
     >(),
     readerViewClassifierVersion: integer("readerViewClassifierVersion"),
+    // Spoken content of a linked video, for links that have any. Video pages
+    // are the one case where the crawled HTML says nothing about the content:
+    // a YouTube watch page yields an empty `htmlContent` and a boilerplate
+    // `description` identical across every video, so summarising from the page
+    // alone produced summaries *of YouTube itself*. Stored here rather than as
+    // an asset because the summariser and embedder both want it as plain text.
+    transcript: text("transcript"),
+    // How `transcript` was obtained: "captions" from a real subtitle track,
+    // "asr" from speech recognition over the audio. Worth distinguishing —
+    // ASR output is noticeably noisier, and it's the difference between a
+    // publisher-authored track and our own best guess.
+    transcriptSource: text("transcriptSource", {
+      enum: ["captions", "asr"],
+    }),
     crawledAt: integer("crawledAt", { mode: "timestamp" }),
     crawlStatus: text("crawlStatus", {
       enum: ["pending", "failure", "success"],

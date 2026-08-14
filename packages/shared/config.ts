@@ -148,6 +148,45 @@ const allEnv = z.object({
     .string()
     .prefault("")
     .transform((t) => t.split("%%").filter((a) => a)),
+
+  // Video transcripts. Independent of CRAWLER_VIDEO_DOWNLOAD: fetching a
+  // subtitle track costs a few KB and a couple of seconds, where downloading
+  // the video costs tens of MB and minutes, so wanting the text is not at all
+  // the same as wanting the file.
+  CRAWLER_VIDEO_TRANSCRIPT: stringBool("true"),
+  CRAWLER_VIDEO_TRANSCRIPT_TIMEOUT_SEC: z.coerce.number().default(60),
+  // Subtitle languages to try, in order, first match wins. Deliberately a
+  // short ordered list rather than yt-dlp's glob syntax: `--sub-langs "en.*"`
+  // expands to every regional and translated variant (en-orig, en-en,
+  // en-de-DE, ...) and yt-dlp fetches them all, which trips YouTube's rate
+  // limiter into HTTP 429 within a handful of bookmarks.
+  CRAWLER_VIDEO_TRANSCRIPT_LANGS: z
+    .string()
+    .prefault("en,en-US,en-GB,de,de-DE")
+    .transform((t) =>
+      t
+        .split(",")
+        .map((l) => l.trim())
+        .filter((l) => l),
+    ),
+  // Cap on how much transcript text is kept. Long videos otherwise blow past
+  // the inference context window, and the summariser gets a truncated prompt
+  // with no idea it was truncated.
+  CRAWLER_VIDEO_TRANSCRIPT_MAX_CHARS: z.coerce.number().default(40000),
+
+  // Speech recognition fallback, for video that has no subtitle track at all —
+  // which is most short-form content (Reels, TikTok). Off unless a model is
+  // configured, since it needs both binaries present and is far slower than
+  // fetching captions.
+  CRAWLER_ASR_ENABLED: stringBool("false"),
+  CRAWLER_ASR_BINARY: z.string().default("whisper-cli"),
+  CRAWLER_ASR_MODEL: z.string().optional(),
+  CRAWLER_ASR_LANGUAGE: z.string().default("auto"),
+  CRAWLER_ASR_TIMEOUT_SEC: z.coerce.number().default(15 * 60),
+  // Refuse to transcribe very long audio: whisper.cpp on CPU runs at roughly
+  // real-time, so an hour-long video would occupy the worker for an hour.
+  CRAWLER_ASR_MAX_DURATION_SEC: z.coerce.number().default(20 * 60),
+
   CRAWLER_MONOLITH_TIMEOUT_SEC: z.coerce.number().default(5),
   CRAWLER_MONOLITH_ARGS: z
     .string()
@@ -414,6 +453,16 @@ const serverConfigSchema = allEnv.transform((val, ctx) => {
       enableAdblocker: val.CRAWLER_ENABLE_ADBLOCKER,
       enableAutoconsent: val.CRAWLER_ENABLE_AUTOCONSENT,
       ytDlpArguments: val.CRAWLER_YTDLP_ARGS,
+      videoTranscript: val.CRAWLER_VIDEO_TRANSCRIPT,
+      videoTranscriptTimeoutSec: val.CRAWLER_VIDEO_TRANSCRIPT_TIMEOUT_SEC,
+      videoTranscriptLangs: val.CRAWLER_VIDEO_TRANSCRIPT_LANGS,
+      videoTranscriptMaxChars: val.CRAWLER_VIDEO_TRANSCRIPT_MAX_CHARS,
+      asrEnabled: val.CRAWLER_ASR_ENABLED,
+      asrBinary: val.CRAWLER_ASR_BINARY,
+      asrModel: val.CRAWLER_ASR_MODEL,
+      asrLanguage: val.CRAWLER_ASR_LANGUAGE,
+      asrTimeoutSec: val.CRAWLER_ASR_TIMEOUT_SEC,
+      asrMaxDurationSec: val.CRAWLER_ASR_MAX_DURATION_SEC,
       monolithTimeoutSec: val.CRAWLER_MONOLITH_TIMEOUT_SEC,
       monolithArguments: val.CRAWLER_MONOLITH_ARGS,
       parserMemLimitMb: val.CRAWLER_PARSER_MEM_LIMIT_MB,

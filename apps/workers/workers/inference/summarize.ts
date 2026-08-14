@@ -34,6 +34,8 @@ async function fetchBookmarkDetailsForSummary(bookmarkId: string) {
           publisher: true,
           author: true,
           url: true,
+          transcript: true,
+          transcriptSource: true,
         },
       },
       // If assets (like PDFs with extracted text) should be summarized, extend here
@@ -104,7 +106,7 @@ export async function runSummarization(
       (await Bookmark.getBookmarkPlainTextContent(link, bookmarkData.userId)) ??
       "";
 
-    if (!link.description && !content) {
+    if (!link.description && !content && !link.transcript) {
       // No content to infer from; skip summarization
       logger.info(
         `[inference] No content found for link "${bookmarkId}". Skipping summary.`,
@@ -112,7 +114,31 @@ export async function runSummarization(
       return "skipped";
     }
 
-    textToSummarize = `
+    // A transcript is the *only* real signal a video link carries. The crawled
+    // page for one is empty HTML plus a site-wide boilerplate description —
+    // summarising that yields a description of YouTube rather than of the
+    // video — so when a transcript exists it leads, and the page metadata is
+    // demoted to context. Labelled with its provenance because ASR output is
+    // noisier than a real subtitle track and the model should weigh it as
+    // such.
+    if (link.transcript) {
+      const sourceLabel =
+        link.transcriptSource === "asr"
+          ? "auto-transcribed from the audio, may contain recognition errors"
+          : "from the video's own subtitle track";
+      textToSummarize = `
+Title: ${link.title ?? ""}
+Publisher: ${link.publisher ?? ""}
+Author: ${link.author ?? ""}
+URL: ${link.url ?? ""}
+
+The following is the transcript of the linked video (${sourceLabel}). Summarise
+what the video actually says, not the page it is hosted on.
+
+Transcript: ${link.transcript}
+`;
+    } else {
+      textToSummarize = `
 Title: ${link.title ?? ""}
 Description: ${link.description ?? ""}
 Content: ${content}
@@ -120,6 +146,7 @@ Publisher: ${link.publisher ?? ""}
 Author: ${link.author ?? ""}
 URL: ${link.url ?? ""}
 `;
+    }
   } else {
     logger.warn(
       `[inference][${jobId}] Bookmark ${bookmarkId} (type: ${bookmarkData.type}) is not a LINK or TEXT type with content, or content is missing. Skipping summary.`,
