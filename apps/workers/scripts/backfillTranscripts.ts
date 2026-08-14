@@ -51,10 +51,14 @@ async function main() {
 
   for (const link of candidates) {
     logger.info(`[backfill] ${link.url}`);
-    const transcript = await extractTranscript({
+    const { transcript, metadata } = await extractTranscript({
       url: link.url,
       jobId: "backfill",
     });
+
+    if (metadata?.title) {
+      logger.info(`[backfill]   title: ${metadata.title}`);
+    }
 
     if (!transcript) {
       failed++;
@@ -74,6 +78,9 @@ async function main() {
       .set({
         transcript: transcript.text,
         transcriptSource: transcript.source,
+        ...(metadata?.title ? { title: metadata.title } : {}),
+        ...(metadata?.author ? { author: metadata.author } : {}),
+        ...(metadata?.description ? { description: metadata.description } : {}),
       })
       .where(eq(bookmarkLinks.id, link.id));
 

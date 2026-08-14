@@ -31,6 +31,7 @@ import logger from "@karakeep/shared/logger";
 import { DequeuedJob, getQueueClient } from "@karakeep/shared/queueing";
 
 import { getBookmarkDetails, updateAsset } from "../workerUtils";
+import { ytDlpAuthArguments } from "./crawler/ytdlpAuth";
 
 const TMP_FOLDER = path.join(os.tmpdir(), "video_downloads");
 
@@ -91,6 +92,7 @@ function prepareYtDlpArguments(
     );
   }
 
+  ytDlpArguments.push(...ytDlpAuthArguments());
   ytDlpArguments.push(...serverConfig.crawler.ytDlpArguments);
   ytDlpArguments.push("-o", assetPath);
   ytDlpArguments.push("--no-playlist");

@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 
-import { isLikelyVideoUrl, vttToPlainText } from "./transcript";
+import {
+  isLikelyVideoUrl,
+  isUselessVideoTitle,
+  vttToPlainText,
+} from "./transcript";
 
 describe("vttToPlainText", () => {
   test("strips the header, cue numbers and timing lines", () => {
@@ -111,5 +115,32 @@ describe("isLikelyVideoUrl", () => {
     expect(isLikelyVideoUrl("https://music.youtube.com/watch?v=x")).toBe(true);
     // A host that merely ends in the same characters must not match.
     expect(isLikelyVideoUrl("https://notyoutube.com/watch?v=x")).toBe(false);
+  });
+});
+
+describe("isUselessVideoTitle", () => {
+  test.each([
+    ["- YouTube", "what a YouTube watch page actually stores"],
+    ["", "empty"],
+    ["   ", "whitespace only"],
+    ["YouTube", "bare site name"],
+    ["| Instagram", "bare site name with a separator"],
+    ["TikTok", "bare site name"],
+  ])("treats %j as useless (%s)", (title) => {
+    expect(isUselessVideoTitle(title)).toBe(true);
+  });
+
+  test.each([
+    "10 open source tools that feel illegal...",
+    "the rejection myth",
+    "How YouTube's algorithm works",
+    "Starting to Teach Myself Electronics",
+  ])("keeps the real title %j", (title) => {
+    expect(isUselessVideoTitle(title)).toBe(false);
+  });
+
+  test("treats null and undefined as useless", () => {
+    expect(isUselessVideoTitle(null)).toBe(true);
+    expect(isUselessVideoTitle(undefined)).toBe(true);
   });
 });

@@ -6,6 +6,8 @@ import { execa } from "execa";
 import serverConfig from "@karakeep/shared/config";
 import logger from "@karakeep/shared/logger";
 
+import { isAuthenticationFailure, ytDlpAuthArguments } from "./ytdlpAuth";
+
 /**
  * Spoken-content extraction for links that point at a video.
  *
@@ -33,6 +35,52 @@ export interface Transcript {
   text: string;
   source: TranscriptSource;
   lang?: string;
+}
+
+/**
+ * The video's own metadata, as the platform knows it.
+ *
+ * Worth capturing because the crawler cannot see any of it. A YouTube watch
+ * page yields a title of "- YouTube" and the site's boilerplate description,
+ * so bookmarks were being saved with no usable title at all. yt-dlp writes
+ * this alongside the subtitles in the same invocation, so it costs nothing
+ * extra to ask for.
+ */
+export interface VideoMetadata {
+  title?: string;
+  description?: string;
+  author?: string;
+}
+
+export interface VideoInfo {
+  transcript: Transcript | null;
+  metadata: VideoMetadata | null;
+}
+
+function readInfoJson(workDir: string): VideoMetadata | null {
+  const infoFile = fs
+    .readdirSync(workDir)
+    .find((f) => f.endsWith(".info.json"));
+  if (!infoFile) return null;
+
+  try {
+    const info = JSON.parse(
+      fs.readFileSync(path.join(workDir, infoFile), "utf8"),
+    ) as Record<string, unknown>;
+
+    const str = (v: unknown) =>
+      typeof v === "string" && v.trim() ? v.trim() : undefined;
+
+    return {
+      title: str(info.title),
+      description: str(info.description),
+      // `uploader` is the display name ("Fireship"); `channel` is the same for
+      // YouTube but absent on several other extractors.
+      author: str(info.uploader) ?? str(info.channel) ?? str(info.creator),
+    };
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -64,6 +112,20 @@ const VIDEO_HOSTS = [
   "odysee.com",
   "rumble.com",
 ];
+
+/**
+ * Whether a crawled title is one of the placeholders a video page yields.
+ *
+ * A YouTube watch page has no server-rendered title, so metascraper falls back
+ * to the `<title>` tag, which before the player boots is just "- YouTube".
+ * Bookmarks were being saved with exactly that as their title.
+ */
+export function isUselessVideoTitle(title: string | null | undefined): boolean {
+  if (!title?.trim()) return true;
+  return /^[\s\-–|]*(YouTube|Instagram|TikTok|Vimeo|Facebook|Watch)[\s\-–|]*$/i.test(
+    title,
+  );
+}
 
 export function isLikelyVideoUrl(url: string): boolean {
   let hostname: string;
@@ -168,8 +230,12 @@ async function fetchCaptions(
   proxy: string | undefined,
   signal: AbortSignal | undefined,
   jobLabel: string,
-): Promise<Transcript | null> {
+): Promise<VideoInfo> {
   const workDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "sub-"));
+  // Populated by whichever invocation gets far enough to write it, even one
+  // that finds no subtitles in the language it asked for — a video with no
+  // captions at all still has a title worth having.
+  let metadata: VideoMetadata | null = null;
 
   try {
     for (const lang of serverConfig.crawler.videoTranscriptLangs) {
@@ -189,6 +255,9 @@ async function fetchCaptions(
         lang,
         "--sub-format",
         "vtt",
+        // Free in this same call, and the only place the real title, channel
+        // and description are available — the crawled page has none of them.
+        "--write-info-json",
         "--no-playlist",
         "--no-warnings",
         "-o",
@@ -197,6 +266,7 @@ async function fetchCaptions(
       if (proxy) {
         args.push("--proxy", proxy);
       }
+      args.push(...ytDlpAuthArguments());
       args.push(...serverConfig.crawler.ytDlpArguments);
 
       try {
@@ -213,13 +283,25 @@ async function fetchCaptions(
           logger.warn(
             `${jobLabel} Rate limited while fetching "${lang}" subtitles. Giving up on captions for this URL.`,
           );
-          return null;
+          return { transcript: null, metadata };
+        }
+        if (isAuthenticationFailure(detail)) {
+          // Worth saying out loud once per URL rather than burying at debug:
+          // the site served nothing because nobody was logged in, which is a
+          // configuration problem the operator can actually fix, and trying
+          // the remaining languages would produce the identical failure.
+          logger.info(
+            `${jobLabel} "${url}" requires authentication. Set CRAWLER_YTDLP_COOKIES_FILE (or CRAWLER_YTDLP_COOKIES_FROM_BROWSER) to fetch it.`,
+          );
+          return { transcript: null, metadata };
         }
         logger.debug(
           `${jobLabel} No "${lang}" subtitles (${detail.split("\n")[0]})`,
         );
         continue;
       }
+
+      metadata ??= readInfoJson(workDir);
 
       const files = (await fs.promises.readdir(workDir)).filter((f) =>
         f.endsWith(".vtt"),
@@ -245,9 +327,12 @@ async function fetchCaptions(
       logger.info(
         `${jobLabel} Extracted a ${text.length} char "${lang}" subtitle track.`,
       );
-      return { text, source: "captions", lang };
+      return {
+        transcript: { text, source: "captions", lang },
+        metadata,
+      };
     }
-    return null;
+    return { transcript: null, metadata };
   } finally {
     await cleanupDir(workDir);
   }
@@ -301,6 +386,7 @@ async function transcribeAudio(
           "%(duration)s",
           "--skip-download",
           "--ignore-no-formats-error",
+          ...ytDlpAuthArguments(),
         ],
         { cancelSignal: signal, timeout: 60_000 },
       );
@@ -335,6 +421,7 @@ async function transcribeAudio(
     if (proxy) {
       dlArgs.push("--proxy", proxy);
     }
+    dlArgs.push(...ytDlpAuthArguments());
     dlArgs.push(...serverConfig.crawler.ytDlpArguments);
 
     try {
@@ -426,28 +513,41 @@ export async function extractTranscript({
   proxy?: string;
   signal?: AbortSignal;
   jobId?: string;
-}): Promise<Transcript | null> {
+}): Promise<VideoInfo> {
   const jobLabel = `[transcript][${jobId ?? "-"}]`;
+  const nothing: VideoInfo = { transcript: null, metadata: null };
 
-  if (!serverConfig.crawler.videoTranscript) return null;
-  if (!isLikelyVideoUrl(url)) return null;
+  if (!serverConfig.crawler.videoTranscript) return nothing;
+  if (!isLikelyVideoUrl(url)) return nothing;
 
   await fs.promises.mkdir(TMP_FOLDER, { recursive: true });
 
   try {
-    const captions = await fetchCaptions(url, proxy, signal, jobLabel);
+    const { transcript: captions, metadata } = await fetchCaptions(
+      url,
+      proxy,
+      signal,
+      jobLabel,
+    );
     const transcript =
       captions ?? (await transcribeAudio(url, proxy, signal, jobLabel));
+
     if (!transcript) {
       logger.debug(`${jobLabel} No transcript available for "${url}".`);
-      return null;
+      // Still worth returning: even with nothing spoken to summarise, the
+      // metadata fixes a bookmark that would otherwise be titled "- YouTube".
+      return { transcript: null, metadata };
     }
+
     return {
-      ...transcript,
-      text: truncate(
-        transcript.text,
-        serverConfig.crawler.videoTranscriptMaxChars,
-      ),
+      metadata,
+      transcript: {
+        ...transcript,
+        text: truncate(
+          transcript.text,
+          serverConfig.crawler.videoTranscriptMaxChars,
+        ),
+      },
     };
   } catch (e) {
     logger.warn(
@@ -455,6 +555,6 @@ export async function extractTranscript({
         e instanceof Error ? e.message : String(e)
       }`,
     );
-    return null;
+    return nothing;
   }
 }

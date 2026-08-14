@@ -49,7 +49,11 @@ import {
   crawlAndParseUrl,
   handleAsAssetBookmark,
 } from "./crawler/crawlAndParse";
-import { extractTranscript, isLikelyVideoUrl } from "./crawler/transcript";
+import {
+  extractTranscript,
+  isLikelyVideoUrl,
+  isUselessVideoTitle,
+} from "./crawler/transcript";
 import {
   getContentTypeAndMetadata,
   loadStoredProbeMetadata,
@@ -284,25 +288,61 @@ async function storeVideoTranscript(
   }
 
   const proxy = getProxyAgent(url, runProxy);
-  const transcript = await extractTranscript({
+  const { transcript, metadata } = await extractTranscript({
     url,
     proxy: proxy?.proxy.toString(),
     signal: job.abortSignal,
     jobId,
   });
 
-  if (!transcript) return;
+  if (!transcript && !metadata) return;
+
+  const update: Partial<typeof bookmarkLinks.$inferInsert> = {};
+
+  if (transcript) {
+    update.transcript = transcript.text;
+    update.transcriptSource = transcript.source;
+  }
+
+  if (metadata) {
+    // Only fill what the crawl could not. The page's own metadata wins when it
+    // says anything real, because it's what the rest of the pipeline already
+    // agreed on; these fields exist to cover the case where it says nothing.
+    // (A title the *user* set lives on `bookmarks.title` and takes precedence
+    // over this column everywhere it's displayed, so it is never at risk.)
+    const existing = await db.query.bookmarkLinks.findFirst({
+      where: eq(bookmarkLinks.id, bookmarkId),
+      columns: { title: true, description: true, author: true },
+    });
+
+    if (metadata.title && isUselessVideoTitle(existing?.title)) {
+      update.title = metadata.title;
+    }
+    if (metadata.author && !existing?.author?.trim()) {
+      update.author = metadata.author;
+    }
+    // The description is replaced rather than merely filled: on a video page
+    // the crawler's value is the *site's* boilerplate, identical for every
+    // video and in whatever locale the crawl happened to get, where yt-dlp's
+    // is the description the uploader actually wrote.
+    if (metadata.description) {
+      update.description = metadata.description;
+    }
+  }
+
+  if (Object.keys(update).length === 0) return;
 
   await db
     .update(bookmarkLinks)
-    .set({
-      transcript: transcript.text,
-      transcriptSource: transcript.source,
-    })
+    .set(update)
     .where(eq(bookmarkLinks.id, bookmarkId));
 
   logger.info(
-    `[Crawler][${jobId}] Stored a ${transcript.text.length} char transcript (${transcript.source}) for "${url}".`,
+    `[Crawler][${jobId}] Stored video metadata for "${url}"${
+      transcript
+        ? ` with a ${transcript.text.length} char transcript (${transcript.source})`
+        : " (no transcript available)"
+    }.`,
   );
 }
 

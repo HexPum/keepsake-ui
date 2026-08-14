@@ -149,6 +149,22 @@ const allEnv = z.object({
     .prefault("")
     .transform((t) => t.split("%%").filter((a) => a)),
 
+  // Authentication for sites that serve nothing to logged-out clients.
+  // Instagram is the motivating case: it answers an anonymous request with an
+  // empty media response, so a Reel yields neither a transcript nor audio to
+  // transcribe until yt-dlp can present a session.
+  //
+  // A session cookie is a credential — it grants whatever the account can do,
+  // and is not scoped to reading. Mount the file read-only, keep it 0600, and
+  // strongly prefer a throwaway account: platforms do rate-limit and
+  // action-block accounts they associate with automated fetching.
+  CRAWLER_YTDLP_COOKIES_FILE: z.string().optional(),
+  // Alternative to the file: read cookies straight out of a local browser
+  // profile, e.g. "firefox" or "chrome:Default". Needs the browser's profile
+  // directory readable by the worker, so it's mostly useful for bare-metal
+  // installs rather than containers.
+  CRAWLER_YTDLP_COOKIES_FROM_BROWSER: z.string().optional(),
+
   // Video transcripts. Independent of CRAWLER_VIDEO_DOWNLOAD: fetching a
   // subtitle track costs a few KB and a couple of seconds, where downloading
   // the video costs tens of MB and minutes, so wanting the text is not at all
@@ -453,6 +469,8 @@ const serverConfigSchema = allEnv.transform((val, ctx) => {
       enableAdblocker: val.CRAWLER_ENABLE_ADBLOCKER,
       enableAutoconsent: val.CRAWLER_ENABLE_AUTOCONSENT,
       ytDlpArguments: val.CRAWLER_YTDLP_ARGS,
+      ytDlpCookiesFile: val.CRAWLER_YTDLP_COOKIES_FILE,
+      ytDlpCookiesFromBrowser: val.CRAWLER_YTDLP_COOKIES_FROM_BROWSER,
       videoTranscript: val.CRAWLER_VIDEO_TRANSCRIPT,
       videoTranscriptTimeoutSec: val.CRAWLER_VIDEO_TRANSCRIPT_TIMEOUT_SEC,
       videoTranscriptLangs: val.CRAWLER_VIDEO_TRANSCRIPT_LANGS,
