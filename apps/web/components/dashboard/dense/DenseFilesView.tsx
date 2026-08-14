@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,6 +25,7 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
+  X,
   Upload,
 } from "lucide-react";
 import { useInView } from "react-intersection-observer";
@@ -88,12 +87,20 @@ export default function DenseFilesView({
    *  to add it to the list. */
   disableAdd?: boolean;
 }) {
-  const router = useRouter();
   const api = useTRPC();
   const { view, setView } = useFilesView();
   const { scale, preference, setPreference } = useDenseScaleContext();
   const { preference: theme, setPreference: setTheme } = useDenseThemeContext();
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  // Inline search. The header used to link to /dashboard/search, which threw
+  // the current view away and landed on a page with no input on it — it told
+  // you to "search from the field above" while rendering no field at all.
+  // Searching a list you are already looking at is the same view with a
+  // narrower query, so it happens here.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const sortOrder = useSortOrderStore((state) => state.sortOrder);
   const setSortOrder = useSortOrderStore((state) => state.setSortOrder);
   const resolvedSortOrder = sortOrder === "relevance" ? "desc" : sortOrder;
@@ -132,33 +139,88 @@ export default function DenseFilesView({
       ),
     );
 
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(searchText), 200);
+    return () => clearTimeout(id);
+  }, [searchText]);
+
+  const isSearching = searchEnabled && debouncedSearch.trim().length > 0;
+
+  const searchResult = useInfiniteQuery(
+    api.bookmarks.searchBookmarks.infiniteQueryOptions(
+      {
+        text: debouncedSearch,
+        searchMode: "fts",
+        sortOrder: sortOrder === "relevance" ? "relevance" : resolvedSortOrder,
+      },
+      {
+        enabled: isSearching,
+        initialCursor: null,
+        getNextPageParam: (lastPage) => lastPage.nextCursor,
+        // Holds the previous hits while the next keystroke's query runs, so
+        // the list doesn't blink through empty on every character.
+        placeholderData: keepPreviousData,
+        gcTime: 0,
+      },
+    ),
+  );
+
+  const activeSource = isSearching
+    ? {
+        data: searchResult.data,
+        hasNextPage: searchResult.hasNextPage,
+        fetchNextPage: searchResult.fetchNextPage,
+        isFetchingNextPage: searchResult.isFetchingNextPage,
+      }
+    : { data, hasNextPage, fetchNextPage, isFetchingNextPage };
+
   // `data` is undefined on the first render of a non-default sort order,
   // where there is no server payload to seed from.
   const bookmarks = useMemo(
-    () => data?.pages.flatMap((p) => p.bookmarks) ?? [],
-    [data],
+    () => activeSource.data?.pages.flatMap((p) => p.bookmarks) ?? [],
+    [activeSource.data],
   );
 
   // The pill advertises ⌘K, so make it real — but only when search is
-  // actually available, otherwise the shortcut would just crash the page.
+  // actually available, otherwise the shortcut would offer something that
+  // cannot work. Opens the field in place; Escape closes it and restores the
+  // unfiltered view.
   useEffect(() => {
     if (!searchEnabled) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        router.push("/dashboard/search");
+        setSearchOpen(true);
+        // The input mounts in this same commit, so focusing has to wait for
+        // it to exist.
+        requestAnimationFrame(() => searchInputRef.current?.focus());
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [searchEnabled, router]);
+  }, [searchEnabled]);
+
+  const closeSearch = () => {
+    setSearchOpen(false);
+    setSearchText("");
+    setDebouncedSearch("");
+  };
 
   const { ref: loadMoreRef, inView } = useInView();
   useEffect(() => {
-    if (inView && hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
+    if (
+      inView &&
+      activeSource.hasNextPage &&
+      !activeSource.isFetchingNextPage
+    ) {
+      activeSource.fetchNextPage();
     }
-  }, [inView, hasNextPage, isFetchingNextPage, fetchNextPage]);
+  }, [
+    inView,
+    activeSource.hasNextPage,
+    activeSource.isFetchingNextPage,
+    activeSource.fetchNextPage,
+  ]);
 
   // Only work that is actually outstanding counts. `summarizationStatus` is
   // `success | failure | pending | null`, and `null` means "never queued" —
@@ -196,26 +258,79 @@ export default function DenseFilesView({
                 {label}
               </h1>
               <p className="font-k-mono text-k-fg-dim text-[11.5px]">
-                {bookmarks.length} item{bookmarks.length === 1 ? "" : "s"} ·{" "}
-                {unsummarisedCount} unsummarised
-                {mostRecentModified && (
-                  <> · updated {formatRelativeSince(mostRecentModified)}</>
+                {isSearching ? (
+                  <>
+                    {bookmarks.length} result
+                    {bookmarks.length === 1 ? "" : "s"} for &ldquo;
+                    {debouncedSearch}&rdquo;
+                  </>
+                ) : (
+                  <>
+                    {bookmarks.length} item{bookmarks.length === 1 ? "" : "s"} ·{" "}
+                    {unsummarisedCount} unsummarised
+                    {mostRecentModified && (
+                      <> · updated {formatRelativeSince(mostRecentModified)}</>
+                    )}
+                  </>
                 )}
               </p>
             </div>
 
             <div className="ml-auto flex items-center gap-[10px]">
               {searchEnabled ? (
-                <Link
-                  href="/dashboard/search"
-                  className={cn(CONTROL_SHELL, "gap-2 px-[12px] text-[12.5px]")}
-                >
-                  <Search size={15} strokeWidth={1.75} />
-                  Search
-                  <kbd className="font-k-mono text-k-fg-dim ml-1 text-[10px]">
-                    ⌘K
-                  </kbd>
-                </Link>
+                searchOpen ? (
+                  <div
+                    className={cn(
+                      CONTROL_SHELL,
+                      "focus-within:border-k-accent gap-2 px-[10px]",
+                    )}
+                  >
+                    <Search
+                      size={15}
+                      strokeWidth={1.75}
+                      className="text-k-accent flex-none"
+                    />
+                    <input
+                      ref={searchInputRef}
+                      value={searchText}
+                      onChange={(e) => setSearchText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") closeSearch();
+                      }}
+                      placeholder={`Search ${label.toLowerCase()}…`}
+                      aria-label="Search bookmarks"
+                      className="text-k-fg placeholder:text-k-fg-dim w-[200px] bg-transparent text-[12.5px] outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={closeSearch}
+                      aria-label="Close search"
+                      className="text-k-fg-dim hover:text-k-fg-muted flex-none"
+                    >
+                      <X size={13} strokeWidth={2} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchOpen(true);
+                      requestAnimationFrame(() =>
+                        searchInputRef.current?.focus(),
+                      );
+                    }}
+                    className={cn(
+                      CONTROL_SHELL,
+                      "gap-2 px-[12px] text-[12.5px]",
+                    )}
+                  >
+                    <Search size={15} strokeWidth={1.75} />
+                    Search
+                    <kbd className="font-k-mono text-k-fg-dim ml-1 text-[10px]">
+                      ⌘K
+                    </kbd>
+                  </button>
+                )
               ) : (
                 <span
                   title="Search needs a search backend configured on the server (see Karakeep's search configuration docs)."
@@ -440,15 +555,15 @@ export default function DenseFilesView({
             </div>
           )}
 
-          {hasNextPage && (
+          {activeSource.hasNextPage && (
             <div ref={loadMoreRef} className="py-4 text-center">
               <button
                 type="button"
-                onClick={() => fetchNextPage()}
-                disabled={isFetchingNextPage}
+                onClick={() => activeSource.fetchNextPage()}
+                disabled={activeSource.isFetchingNextPage}
                 className="font-k-mono text-k-fg-dim hover:text-k-fg-muted text-[11px]"
               >
-                {isFetchingNextPage ? "Loading…" : "Load more"}
+                {activeSource.isFetchingNextPage ? "Loading…" : "Load more"}
               </button>
             </div>
           )}

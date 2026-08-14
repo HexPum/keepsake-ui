@@ -52,7 +52,27 @@ if ! docker info >/dev/null 2>&1; then
   wait_for "the Docker daemon" "docker info" 60
 fi
 
+# The compose file reads MEILI_MASTER_KEY from the *shell*, falling back to
+# "devkey-change-me". The app reads it from apps/web/.env. Nothing connected
+# those two, so the container came up on the default key while the app
+# authenticated with the one in .env, and every search failed with
+# "MeilisearchApiError: The provided API key is invalid." — surfacing in the UI
+# as a search box that simply returned nothing, with the real cause only
+# visible in the worker log. Export the app's value so the container is always
+# started with the key the app is going to present.
+if [[ -f apps/web/.env ]]; then
+  key="$(grep -E '^MEILI_MASTER_KEY=' apps/web/.env | tail -1 | cut -d= -f2- | tr -d '"'"'"'')"
+  if [[ -n "$key" ]]; then
+    export MEILI_MASTER_KEY="$key"
+  else
+    echo "Note: MEILI_MASTER_KEY is not set in apps/web/.env; using the compose default." >&2
+  fi
+fi
+
 echo "Starting Meilisearch (${COMPOSE_FILE})..."
+# --force-recreate is not used: compose already recreates the container when
+# the resolved environment changes, and recreating unconditionally would throw
+# away a healthy container on every single start.
 docker compose -f "$COMPOSE_FILE" up -d
 
 echo "Waiting for Meilisearch at ${MEILI_URL}..."

@@ -14,6 +14,7 @@ import { NoteEditor } from "@/components/dashboard/preview/NoteEditor";
 import { TextContentSection } from "@/components/dashboard/preview/TextContentSection";
 import { FullPageSpinner } from "@/components/ui/full-page-spinner";
 import { useSession } from "@/lib/auth/client";
+import { useClientConfig } from "@/lib/clientConfig";
 import { getDenseRowTitle } from "@/lib/dense/bookmarkDisplay";
 import { formatSavedAgo } from "@/lib/dense/format";
 import { parseSummary } from "@/lib/dense/summary";
@@ -104,6 +105,12 @@ export default function DenseBookmarkDetail({
       },
     ),
   );
+
+  // Re-summarising needs an inference provider on the server. Without one the
+  // mutation is rejected with BAD_REQUEST ("No inference client configured"),
+  // so an ungated button is an offer the server cannot honour — it failed with
+  // a generic "Something went wrong" that named neither the cause nor the fix.
+  const inferenceConfigured = useClientConfig().inference.isConfigured;
 
   const onError = () => toast.error("Something went wrong");
   const { mutate: updateBookmark, isPending: isUpdating } = useUpdateBookmark({
@@ -213,9 +220,19 @@ export default function DenseBookmarkDetail({
 
         <button
           type="button"
-          disabled={!isOwner || isResummarising || isPendingSummary}
+          disabled={
+            !isOwner ||
+            !inferenceConfigured ||
+            isResummarising ||
+            isPendingSummary
+          }
+          title={
+            inferenceConfigured
+              ? undefined
+              : "Summarising needs an AI provider configured on the server (set OPENAI_API_KEY or OLLAMA_BASE_URL, and INFERENCE_ENABLE_AUTO_SUMMARIZATION)."
+          }
           onClick={() => resummarise({ bookmarkId: bookmark.id })}
-          className="font-k-mono border-k-accent-border text-k-accent ml-auto inline-flex items-center gap-[6px] rounded-full border px-[9px] py-[3px] text-[10.5px] font-medium uppercase tracking-[0.06em] disabled:opacity-50"
+          className="font-k-mono border-k-accent-border text-k-accent ml-auto inline-flex items-center gap-[6px] rounded-full border px-[9px] py-[3px] text-[10.5px] font-medium uppercase tracking-[0.06em] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <RefreshCw
             size={12}
