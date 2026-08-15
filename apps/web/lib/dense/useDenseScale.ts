@@ -15,17 +15,21 @@ import { useCallback, useEffect, useState } from "react";
  * padding/border-radius/height ratios that look right at 1x don't hold up
  * blown up uniformly, so the button dominates the dialog instead of
  * sitting in proportion with it. Reported directly against a real external
- * monitor, not a guess. AUTO_MAX_SCALE keeps automatic scaling to fitting
- * *down*, never up past the design's own sizes — the manual +/- control in
- * the header's Scale menu still goes up to MAX_SCALE for anyone who wants
- * larger UI on purpose (that's a size preference, not a viewport-fit bug).
+ * monitor, not a guess.
+ *
+ * The cap that fixed it sat at 1x, which left the design smaller than
+ * intended on a large display. AUTO_MAX_SCALE is the compromise: automatic
+ * scaling may go up to 1.3x, comfortably short of the ratios that made
+ * controls look wrong, and never beyond. The manual +/- control in the
+ * header's Scale menu still reaches MAX_SCALE for anyone who wants larger UI
+ * on purpose (that's a size preference, not a viewport-fit bug).
  */
 const DESIGN_WIDTH = 1000;
 const DESIGN_HEIGHT = 625;
 
 export const MIN_SCALE = 0.85;
 export const MAX_SCALE = 2.5;
-const AUTO_MAX_SCALE = 1;
+const AUTO_MAX_SCALE = 1.3;
 const STORAGE_KEY = "k-dense-scale";
 
 export type ScalePreference = "auto" | number;
