@@ -254,6 +254,26 @@ between title and summary — worth reproducing as a user preference:
 None inside the UI. Surfaces are separated by borders and background steps only — keep
 it that way; shadows would break the flat, minimal read.
 
+### Motion
+The prototype only specifies motion in prose ("hover on a row: add a background lift");
+these are the concrete numbers that implements it, plus what's still open.
+
+- **Hover / active state (implemented).** `150ms ease` on `background-color`, `color`,
+  `border-color`, `opacity` only — no `transform`, no shadow, consistent with the
+  zero-elevation rule above. Applied once, globally, to every link/button/`[role=button]`
+  in `.k-dense` (`dense-theme.css`), including portaled dropdowns and dialogs, rather than
+  per-component — covers row hover, nav rows, icon buttons, tag chips, and theme swatches
+  without needing `transition-colors` remembered on each one added later.
+- **Sidebar collapse/expand (not animated — a real gap, not a choice).** The 153px
+  expanded and 58px rail states render as two structurally different `<aside>` trees
+  (`DenseSidebar.tsx`), not one element whose width changes — full nav with section
+  labels vs. an icon-only column. A CSS width transition can't bridge that; animating this
+  would mean restructuring to a single container with cross-fading content, which is a
+  real follow-up task, not a token change. Until then it's a hard cut, by necessity rather
+  than intent.
+- **Row → detail view (unspecified).** The prototype doesn't wire this transition at all;
+  no target has been decided yet.
+
 ---
 
 ## Assets
