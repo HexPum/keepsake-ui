@@ -35,6 +35,11 @@ yarn-error.log*
 .env*.local
 .env
 
+# Exported browser cookie jars. A live session cookie is as good as the
+# password; these must never reach a commit.
+*cookies.txt
+docker/ig-cookies.txt
+
 # vercel
 .vercel
 

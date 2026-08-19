@@ -1,11 +1,31 @@
-FROM node:24-alpine
+# Pinned to match docker/Dockerfile, which explains the reason: node:24-slim
+# currently resolves to 24.19.0, and better-sqlite3 11.x dies there with
+# "Assertion failed: (env) != nullptr" in Statement::~Statement().
+# tsx watch survives that crash, so the workers container looks healthy while
+# processing nothing. Unpin only when the upstream Dockerfile does.
+#   https://github.com/nodejs/node/pull/65042
+FROM node:24.18.1-slim
 
 WORKDIR /app
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 
-# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
-RUN apk add --no-cache libc6-compat make g++ py3-pip linux-headers git
+# Install build dependencies and git
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        python3 \
+        python3-pip \
+        git \
+        curl \
+        ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# The crawler shells out to yt-dlp for video titles and transcripts, so it has
+# to exist in this image — the host's copy is never reachable from here.
+# Installed from pip rather than apt because Debian's package lags by months
+# and site extractors (Instagram especially) break faster than that.
+RUN pip3 install --no-cache-dir --break-system-packages -U yt-dlp
 
 RUN corepack enable
 

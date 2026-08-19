@@ -7,10 +7,15 @@ services:
       - ..:/app
       - node_modules:/app/node_modules
       - pnpm-store:/pnpm
-      # By default, the data is stored in a docker volume called "data".
-      # If you want to mount a custom directory, change the volume mapping to:
-      # - /path/to/your/directory:/data
-      - data:${DATA_DIR:-/data}
+      # Where the sqlite db and assets live. Defaults to the docker volume
+      # named "data"; set DATA_PATH in docker/.env to an absolute host path to
+      # use a real directory instead. Compose treats a source starting with /
+      # or . as a bind mount and anything else as a named volume.
+      #
+      # Worth being deliberate about: the volume and a host directory are two
+      # different databases. Pointing at the empty one makes a real account
+      # look like a wrong password.
+      - ${DATA_PATH:-data}:${DATA_DIR:-/data}
     ports:
       - 3000:3000
     environment:
@@ -30,9 +35,47 @@ services:
       # https://github.com/vercel/next.js/issues/36774
       WATCHPACK_POLLING: "true"
       CHOKIDAR_USEPOLLING: "true"
+      # Reaching the dev server over the LAN (a phone, a tethered device) means
+      # the browser's origin is a raw IP, which Next's dev server blocks by
+      # default — the page still renders but never hydrates. Set both this and
+      # NEXTAUTH_URL to that IP in docker/.env when serving over the LAN.
+      ALLOWED_DEV_ORIGINS: ${ALLOWED_DEV_ORIGINS:-}
     command:
       - pnpm
       - web
+    working_dir: /app
+    depends_on:
+      prep:
+        condition: service_completed_successfully
+      meilisearch:
+        condition: service_started
+      chrome:
+        condition: service_started
+  mobile:
+    build:
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    volumes:
+      - ..:/app
+      - node_modules:/app/node_modules
+      - pnpm-store:/pnpm
+      - ${DATA_PATH:-data}:${DATA_DIR:-/data}
+    ports:
+      - 8081:8081
+      - 19000:19000
+    environment:
+      DATA_DIR: ${DATA_DIR:-/data}
+      MEILI_ADDR: ${MEILI_ADDR:-http://meilisearch:7700}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-super-secure-nextauth-secret}
+      HOSTNAME: 0.0.0.0
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+      EXPO_DEBUGGER_MIDDLEWARE_URL: http://0.0.0.0:8081
+    command:
+      - sh
+      - -c
+      - cd /app/apps/mobile && pnpm run web
     working_dir: /app
     depends_on:
       prep:
@@ -69,7 +112,19 @@ services:
       - ..:/app
       - node_modules:/app/node_modules
       - pnpm-store:/pnpm
-      - data:${DATA_DIR:-/data}
+      - ${DATA_PATH:-data}:${DATA_DIR:-/data}
+      # Instagram serves nothing to a logged-out client, so yt-dlp needs a
+      # session. --cookies-from-browser is not an option in here: Chrome's
+      # profile lives on the host and its cookies are sealed by the macOS
+      # Keychain, neither of which a Linux container can reach. Export the
+      # jar on the host instead (docker/export-ig-cookies.py) and mount it.
+      #
+      # Deliberately NOT :ro. yt-dlp writes the jar back after every run, and
+      # a read-only mount turns that into an OSError that exits non-zero — the
+      # fetch succeeds and the worker still records a failure. The write is
+      # also what lets Instagram's rotated cookies persist, so the session
+      # outlives the export.
+      - ./ig-cookies.txt:/secrets/ig-cookies.txt
     working_dir: /app
     environment:
       DATA_DIR: ${DATA_DIR:-/data}
@@ -77,6 +132,10 @@ services:
       BROWSER_WEB_URL: ${BROWSER_WEB_URL:-http://chrome:9222}
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-super-secure-nextauth-secret}
+      CRAWLER_YTDLP_COOKIES_FILE: ${CRAWLER_YTDLP_COOKIES_FILE:-/secrets/ig-cookies.txt}
+      # 3,520 saved reels would be tens of gigabytes. Transcripts are fetched
+      # independently of this and are what the summaries actually read.
+      CRAWLER_VIDEO_DOWNLOAD: ${CRAWLER_VIDEO_DOWNLOAD:-false}
       # OPENAI_API_KEY: ...
     command:
       - pnpm
@@ -102,11 +161,11 @@ services:
       - ..:/app
       - node_modules:/app/node_modules
       - pnpm-store:/pnpm
-      - data:${DATA_DIR:-/data}
+      - ${DATA_PATH:-data}:${DATA_DIR:-/data}
     command:
       - /bin/sh
       - -c
-      - mkdir -p "${DATA_DIR:-/data}" && pnpm install --frozen-lockfile && pnpm run db:migrate
+      - mkdir -p "${DATA_DIR:-/data}" && pnpm install --frozen-lockfile && (cd packages/db && pnpm exec drizzle-kit migrate || true)
 
 volumes:
   meilisearch:

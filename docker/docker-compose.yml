@@ -1,6 +1,10 @@
 services:
   web:
-    image: ghcr.io/hexpum/keepsake-ui:${KEEPSAKE_VERSION:-release}
+    # This fork publishes :release only when a GitHub release is created, and
+    # none exists yet — :latest (built on every push to main) is the tag that
+    # actually resolves. Pin KEEPSAKE_VERSION to a version tag once you cut a
+    # release, so a Pi doesn't silently follow main.
+    image: ghcr.io/hexpum/keepsake-ui:${KEEPSAKE_VERSION:-latest}
     restart: unless-stopped
     volumes:
       # By default, the data is stored in a docker volume called "data".
@@ -19,6 +23,12 @@ services:
       # You almost never want to change the value of the DATA_DIR variable.
       # If you want to mount a custom directory, change the volume mapping above instead.
       DATA_DIR: /data # DON'T CHANGE THIS
+    # Ordering matters on an unattended host: after a power cut the Pi brings
+    # every container up at once, and the crawler's first jobs fail if Chrome
+    # and Meilisearch aren't listening yet.
+    depends_on:
+      - meilisearch
+      - chrome
   chrome:
     image: ghcr.io/karakeep-app/karakeep-chrome:release
     restart: unless-stopped
