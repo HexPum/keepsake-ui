@@ -1,0 +1,10 @@
+{
+  "description": "This mobile app offers a user-friendly interface for managing personal keepsakes, allowing users to easily organize and cherish their memories.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
