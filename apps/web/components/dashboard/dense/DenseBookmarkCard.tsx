@@ -38,11 +38,13 @@ export function DenseBookmarkCard({
       {...navigate}
       className="border-k-border bg-k-surface-1 group relative flex cursor-pointer flex-col gap-2 rounded-[12px] border p-[16px_17px]"
     >
-      <div className="relative z-10 flex items-center justify-between">
-        <span className="font-k-mono text-k-fg-dim text-[10px] font-medium uppercase tracking-[0.08em]">
-          {source ?? "AI title"}
-        </span>
-        <div className="text-k-icon flex items-center gap-2">
+      <div className="relative z-10 flex items-center">
+        {source && (
+          <span className="font-k-mono text-k-fg-dim text-[10px] font-medium uppercase tracking-[0.08em]">
+            {source}
+          </span>
+        )}
+        <div className="text-k-icon ml-auto flex items-center gap-2">
           <button
             type="button"
             aria-label={bookmark.favourited ? "Unfavourite" : "Favourite"}
