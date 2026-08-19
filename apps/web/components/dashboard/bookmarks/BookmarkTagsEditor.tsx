@@ -13,9 +13,15 @@ export function BookmarkTagsEditor({
   disabled?: boolean;
 }) {
   const { mutate } = useUpdateBookmarkTags({
-    onSuccess: () => {
+    onSuccess: (_res, req) => {
+      const description =
+        req.attach.length > 0 && req.detach.length === 0
+          ? "Tag added!"
+          : req.detach.length > 0 && req.attach.length === 0
+            ? "Tag removed!"
+            : "Tags have been updated!";
       toast({
-        description: "Tags has been updated!",
+        description,
       });
     },
     onError: () => {
