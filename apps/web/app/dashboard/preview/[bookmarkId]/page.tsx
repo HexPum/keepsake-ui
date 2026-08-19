@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import DenseBookmarkDetail from "@/components/dashboard/dense/DenseBookmarkDetail";
 import { MobileBookmarkDetail } from "@/components/dashboard/dense/mobile/MobileBookmarkDetail";
 import { api } from "@/server/api/client";
@@ -17,6 +17,15 @@ export default async function BookmarkPreviewPage(props: {
     if (e instanceof TRPCError) {
       if (e.code === "NOT_FOUND") {
         notFound();
+      }
+      if (e.code === "UNAUTHORIZED") {
+        // Session expired/missing between the dashboard layout's own check
+        // and this page's server-side tRPC call (or a direct hit before the
+        // layout's redirect settles). This is a normal not-logged-in case,
+        // not a crash — redirect() throws a NEXT_REDIRECT signal that
+        // Next.js handles internally, so it never surfaces as an unhandled
+        // server error in the logs the way rethrowing the TRPCError did.
+        redirect("/");
       }
     }
     throw e;
