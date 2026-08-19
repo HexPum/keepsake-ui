@@ -20,6 +20,7 @@ import { Command as CommandPrimitive } from "cmdk";
 import { Check, Loader2, Plus, Sparkles, X } from "lucide-react";
 
 import type { ZBookmarkTags } from "@karakeep/shared/types/tags";
+import { useDebounce } from "@karakeep/shared-react/hooks/use-debounce";
 import { useTRPC } from "@karakeep/shared-react/trpc";
 
 export function TagsEditor({
@@ -96,12 +97,17 @@ export function TagsEditor({
     });
   }, [_tags, allowCreation]);
 
+  // Debounce the search term before it hits the query so that fast typing
+  // doesn't fire (and pile up) a separate tags.list request per keystroke.
+  // Mirrors the same pattern used by TagAutocomplete/AllTagsView.
+  const debouncedInputValue = useDebounce(inputValue, 300);
+
   const { data: filteredOptions, isLoading: isExistingTagsLoading } = useQuery(
     api.tags.list.queryOptions(
       {
-        nameContains: inputValue,
+        nameContains: debouncedInputValue,
         limit: 50,
-        sortBy: inputValue.length > 0 ? "relevance" : "usage",
+        sortBy: debouncedInputValue.length > 0 ? "relevance" : "usage",
       },
       {
         select: (data) =>
@@ -114,7 +120,7 @@ export function TagsEditor({
                 : ("ai" as const),
           })),
         placeholderData: keepPreviousData,
-        gcTime: inputValue.length > 0 ? 60_000 : 3_600_000,
+        gcTime: debouncedInputValue.length > 0 ? 60_000 : 3_600_000,
       },
     ),
   );
