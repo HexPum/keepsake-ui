@@ -81,7 +81,7 @@ theme. The sidebar collapses to an icon rail when the list needs the width.
 ### Mobile
 
 <div align="center">
-<img src="docs/screenshots/08-mobile.png" alt="Mobile list view" width="320" />
+<img src="docs/screenshots/Keepsake-Mobile-Preview.jpg" alt="Mobile list view" width="320" />
 </div>
 
 ## What this fork changes
