@@ -15,7 +15,10 @@ import { TextContentSection } from "@/components/dashboard/preview/TextContentSe
 import { FullPageSpinner } from "@/components/ui/full-page-spinner";
 import { useSession } from "@/lib/auth/client";
 import { useClientConfig } from "@/lib/clientConfig";
-import { getDenseRowTitle } from "@/lib/dense/bookmarkDisplay";
+import {
+  getDenseRowTitle,
+  shouldDefaultOpenContentDisclosure,
+} from "@/lib/dense/bookmarkDisplay";
 import { formatSavedAgo } from "@/lib/dense/format";
 import { parseSummary } from "@/lib/dense/summary";
 import { cn } from "@/lib/utils";
@@ -89,7 +92,12 @@ export default function DenseBookmarkDetail({
 }) {
   const api = useTRPC();
   const { data: session } = useSession();
-  const [contentOpen, setContentOpen] = useState(false);
+  // `null` = no explicit user choice yet, so the default below (open for
+  // note-type bookmarks, closed otherwise) applies. A real boolean once the
+  // user actually clicks the disclosure overrides that default either way.
+  const [contentOpenOverride, setContentOpenOverride] = useState<
+    boolean | null
+  >(null);
   const [tagEditorOpen, setTagEditorOpen] = useState(false);
 
   const { data: bookmark } = useQuery(
@@ -125,6 +133,10 @@ export default function DenseBookmarkDetail({
   if (!bookmark) {
     return <FullPageSpinner />;
   }
+
+  const contentOpen =
+    contentOpenOverride ??
+    shouldDefaultOpenContentDisclosure(bookmark.content.type);
 
   const isOwner = session?.user?.id === bookmark.userId;
   const sourceUrl = getSourceUrl(bookmark);
@@ -367,7 +379,7 @@ export default function DenseBookmarkDetail({
           <button
             type="button"
             aria-expanded={contentOpen}
-            onClick={() => setContentOpen((open) => !open)}
+            onClick={() => setContentOpenOverride(!contentOpen)}
             className="font-k-mono text-k-fg-dim hover:text-k-fg-muted flex w-full items-center gap-[8px] px-[34px] py-[14px] text-[10px] font-medium uppercase tracking-[0.08em]"
           >
             <ChevronRight

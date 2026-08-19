@@ -15,7 +15,10 @@ import { NoteEditor } from "@/components/dashboard/preview/NoteEditor";
 import { TextContentSection } from "@/components/dashboard/preview/TextContentSection";
 import { FullPageSpinner } from "@/components/ui/full-page-spinner";
 import { useSession } from "@/lib/auth/client";
-import { getDenseRowTitle } from "@/lib/dense/bookmarkDisplay";
+import {
+  getDenseRowTitle,
+  shouldDefaultOpenContentDisclosure,
+} from "@/lib/dense/bookmarkDisplay";
 import {
   estimateReadingTimeMinutes,
   formatSavedAgo,
@@ -87,7 +90,12 @@ export function MobileBookmarkDetail({
   const api = useTRPC();
   const router = useRouter();
   const { data: session } = useSession();
-  const [contentOpen, setContentOpen] = useState(false);
+  // `null` = no explicit user choice yet, so the default below (open for
+  // note-type bookmarks, closed otherwise) applies. See the matching note in
+  // desktop's DenseBookmarkDetail.
+  const [contentOpenOverride, setContentOpenOverride] = useState<
+    boolean | null
+  >(null);
   const handleBack = onBack ?? (() => router.back());
 
   const { data: bookmark } = useQuery(
@@ -168,6 +176,10 @@ export function MobileBookmarkDetail({
       </div>
     );
   }
+
+  const contentOpen =
+    contentOpenOverride ??
+    shouldDefaultOpenContentDisclosure(bookmark.content.type);
 
   const isOwner = session?.user?.id === bookmark.userId;
   const sourceUrl = getSourceUrl(bookmark);
@@ -348,7 +360,7 @@ export function MobileBookmarkDetail({
           <button
             type="button"
             aria-expanded={contentOpen}
-            onClick={() => setContentOpen((open) => !open)}
+            onClick={() => setContentOpenOverride(!contentOpen)}
             className="font-k-mono text-k-fg-dim flex w-full items-center gap-[8px] py-[14px] text-[10px] font-medium uppercase tracking-[0.08em]"
           >
             <ChevronRight
