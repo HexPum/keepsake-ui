@@ -299,24 +299,10 @@ export function TagsEditor({
         }));
   const visiblePlaceholder =
     optimisticTags.length === 0 ? inputPlaceholder : undefined;
-  // Cap the input's rendered width in `ch` units regardless of how long the
-  // typed text is. This container is the Popover's `PopoverTrigger` anchor,
-  // and is `flex flex-wrap`: an uncapped width let a long enough tag name
-  // grow the input wide enough to force the row to wrap onto a new line
-  // while the suggestions popover was open, which fed into Radix Popover's
-  // position-tracking ResizeObserver (it re-measures this anchor on every
-  // resize) and crashed the page with "Maximum update depth exceeded". The
-  // typed value itself is untouched here — only the visible box width is
-  // capped, so nothing the user types is lost; text beyond the cap just
-  // scrolls within the input like any other text field.
-  const MAX_INPUT_WIDTH_CH = 24;
   const inputWidth = Math.max(
-    Math.min(
-      inputValue.length > 0
-        ? inputValue.length
-        : (visiblePlaceholder?.length ?? 1),
-      MAX_INPUT_WIDTH_CH,
-    ),
+    inputValue.length > 0
+      ? inputValue.length
+      : Math.min(visiblePlaceholder?.length ?? 1, 24),
     1,
   );
 
@@ -343,22 +329,11 @@ export function TagsEditor({
                           : "bg-accent",
                       )}
                     >
-                      <div className="m-auto flex min-w-0 gap-2">
+                      <div className="m-auto flex gap-2">
                         {tag.attachedBy === "ai" && (
-                          <Sparkles className="m-auto size-4 shrink-0" />
+                          <Sparkles className="m-auto size-4" />
                         )}
-                        {/* Same rationale as inputWidth above: this pill sits
-                            inside the flex-wrap Popover anchor, so an
-                            unbounded-width tag name (e.g. an existing 29+
-                            char tag) can force the anchor to wrap/resize
-                            while the popover is open and crash the page via
-                            Radix Popover's resize-driven position update.
-                            Truncate the *display* only — the full name is
-                            still in `tag.name`/the DB and shows via the
-                            title tooltip; nothing is lost. */}
-                        <span className="max-w-40 truncate" title={tag.name}>
-                          {tag.name}
-                        </span>
+                        {tag.name}
                         {!isDisabled && (
                           <button
                             type="button"
