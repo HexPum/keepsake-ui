@@ -10,6 +10,12 @@
       "Bash(pnpm test:*)",
       "Bash(pnpm --filter * test:*)"
     ],
-    "deny": []
+    "deny": [
+      "Read(.env)",
+      "Read(.env*.local)",
+      "Read(**/.ssh/**)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)"
+    ]
   }
 }
