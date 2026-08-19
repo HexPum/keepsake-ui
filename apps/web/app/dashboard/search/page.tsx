@@ -1,8 +1,8 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState } from "react";
-import BookmarksGrid from "@/components/dashboard/bookmarks/BookmarksGrid";
-import BookmarksGridSkeleton from "@/components/dashboard/bookmarks/BookmarksGridSkeleton";
+import NoBookmarksBanner from "@/components/dashboard/bookmarks/NoBookmarksBanner";
+import { DenseBookmarkRow } from "@/components/dashboard/dense/DenseBookmarkRow";
 import { MobileSearchHome } from "@/components/dashboard/dense/mobile/MobileSearchHome";
 import {
   useBookmarkSearch,
@@ -13,6 +13,7 @@ import { useInSearchPageStore } from "@/lib/store/useInSearchPageStore";
 import { useSortOrderStore } from "@/lib/store/useSortOrderStore";
 import { cn } from "@/lib/utils";
 import { Search } from "lucide-react";
+import { useInView } from "react-intersection-observer";
 
 function SearchComp() {
   const { searchQuery } = useBookmarkSearchState();
@@ -60,6 +61,15 @@ function SearchComp() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  const { ref: loadMoreRef, inView: loadMoreInView } = useInView();
+  useEffect(() => {
+    if (loadMoreInView && hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [loadMoreInView, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const results = data?.pages.flatMap((p) => p.bookmarks);
 
   return (
     <div className="hidden flex-col gap-3 sm:flex">
@@ -116,15 +126,48 @@ function SearchComp() {
             Try again
           </button>
         </div>
-      ) : data ? (
-        <BookmarksGrid
-          hasNextPage={hasNextPage}
-          fetchNextPage={fetchNextPage}
-          isFetchingNextPage={isFetchingNextPage}
-          bookmarks={data.pages.flatMap((b) => b.bookmarks)}
-        />
+      ) : results ? (
+        results.length === 0 ? (
+          <NoBookmarksBanner />
+        ) : (
+          <>
+            {/* Same text-first, no-thumbnail row the main bookmarks list uses
+                (DenseFilesView's list view) — this page used to fall back to
+                the pre-fork BookmarksGrid/BookmarkCard, which render a large
+                thumbnail per card and no summary text, breaking the "no
+                thumbnails" design mission for this route only. */}
+            <div className="flex flex-col">
+              {results.map((bookmark) => (
+                <DenseBookmarkRow key={bookmark.id} bookmark={bookmark} />
+              ))}
+            </div>
+            {hasNextPage && (
+              <div ref={loadMoreRef} className="py-4 text-center">
+                <button
+                  type="button"
+                  onClick={() => fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                  className="font-k-mono text-k-fg-dim hover:text-k-fg-muted text-[11px]"
+                >
+                  {isFetchingNextPage ? "Loading…" : "Load more"}
+                </button>
+              </div>
+            )}
+          </>
+        )
       ) : (
-        <BookmarksGridSkeleton />
+        <div className="flex flex-col">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="border-k-border-soft flex flex-col gap-[6px] border-t px-[18px] py-[14px] first:border-t-0"
+            >
+              <div className="bg-k-border h-3 w-3/4 rounded-[3px]" />
+              <div className="bg-k-border h-2 w-full rounded-[3px]" />
+              <div className="bg-k-border h-2 w-1/3 rounded-[3px]" />
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
