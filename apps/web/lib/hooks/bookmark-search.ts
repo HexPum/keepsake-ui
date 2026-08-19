@@ -159,6 +159,7 @@ export function useBookmarkSearch({
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
+    refetch,
   } = useInfiniteQuery(
     api.bookmarks.searchBookmarks.infiniteQueryOptions(
       {
@@ -172,6 +173,12 @@ export function useBookmarkSearch({
         gcTime: 0,
         initialCursor: null,
         getNextPageParam: (lastPage) => lastPage.nextCursor,
+        // The search backend being unreachable is a real, recoverable
+        // failure mode (e.g. the search index restarting), not a bug to
+        // retry-and-hope-away silently. Fail fast so the page can show an
+        // error state instead of sitting on the loading skeleton through
+        // several rounds of default retry backoff.
+        retry: 1,
       },
     ),
   );
@@ -184,5 +191,6 @@ export function useBookmarkSearch({
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
+    refetch,
   };
 }

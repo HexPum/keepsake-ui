@@ -26,14 +26,20 @@ function SearchComp() {
 
   // Gated on there being something to search for. Previously this fired a
   // `searchBookmarks` request for `""` whenever the page was opened without
-  // a query, and then `throw error` below turned any failure into the
-  // dashboard's error boundary. On a server with no search backend
-  // configured that empty request always fails, so simply landing on
-  // /dashboard/search crashed the route — and because this page also hosts
-  // the mobile Search tab (the mobile shell's default landing tab), it took
-  // that whole screen down with it, on a query the user never typed.
-  const { data, error, hasNextPage, fetchNextPage, isFetchingNextPage } =
-    useBookmarkSearch({ enabled: hasQuery });
+  // a query, and any failure was thrown to the dashboard's error boundary.
+  // On a server with no search backend configured that empty request always
+  // fails, so simply landing on /dashboard/search crashed the route — and
+  // because this page also hosts the mobile Search tab (the mobile shell's
+  // default landing tab), it took that whole screen down with it, on a
+  // query the user never typed.
+  const {
+    data,
+    error,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+    refetch,
+  } = useBookmarkSearch({ enabled: hasQuery });
 
   const { setInSearchPage } = useInSearchPageStore();
 
@@ -54,10 +60,6 @@ function SearchComp() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
-
-  if (error) {
-    throw error;
-  }
 
   return (
     <div className="hidden flex-col gap-3 sm:flex">
@@ -96,6 +98,24 @@ function SearchComp() {
         <p className="text-k-fg-dim py-[40px] text-center text-sm">
           Type above to search your bookmarks.
         </p>
+      ) : error ? (
+        // A failed search (e.g. the search backend being unreachable) used
+        // to `throw` here, which tore down the whole dashboard shell via the
+        // route error boundary. A search failing is routine and recoverable
+        // — show it in place, with a way to retry, instead of crashing the
+        // page around it.
+        <div className="flex flex-col items-center gap-[10px] py-[40px] text-center">
+          <p className="text-k-fg-dim text-sm">
+            Search failed. The search index may be unavailable.
+          </p>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="font-k-mono border-k-accent-border text-k-accent rounded-full border px-[10px] py-[4px] text-[10.5px] font-medium uppercase tracking-[0.06em]"
+          >
+            Try again
+          </button>
+        </div>
       ) : data ? (
         <BookmarksGrid
           hasNextPage={hasNextPage}
