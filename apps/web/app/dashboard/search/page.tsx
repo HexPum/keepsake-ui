@@ -1,7 +1,6 @@
 "use client";
 
 import { Suspense, useEffect, useRef, useState } from "react";
-import NoBookmarksBanner from "@/components/dashboard/bookmarks/NoBookmarksBanner";
 import { DenseBookmarkRow } from "@/components/dashboard/dense/DenseBookmarkRow";
 import { MobileSearchHome } from "@/components/dashboard/dense/mobile/MobileSearchHome";
 import {
@@ -128,7 +127,13 @@ function SearchComp() {
         </div>
       ) : results ? (
         results.length === 0 ? (
-          <NoBookmarksBanner />
+          // Distinct from the "no bookmarks yet" empty state
+          // (NoBookmarksBanner, shown when the whole account has zero
+          // bookmarks): the account isn't necessarily empty here, this
+          // specific query just didn't match anything in it.
+          <p className="text-k-fg-dim py-[40px] text-center text-sm">
+            No results for &ldquo;{searchQuery}&rdquo;.
+          </p>
         ) : (
           <>
             {/* Same text-first, no-thumbnail row the main bookmarks list uses
