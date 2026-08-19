@@ -1,70 +1,80 @@
-# Karakeep Project Overview
+# Keepsake
 
-This document provides context about the Karakeep project for the different agents.
+This document provides context about the Keepsake project for the different agents.
 
-## Project Overview
+## What this is
 
-Karakeep is a monorepo project managed with Turborepo. It is a "read-it-later" bookmarking application with a focus on collecting and organizing information. The project is built with a modern tech stack, including:
+Keepsake is a **UI fork** of [Karakeep](https://github.com/karakeep-app/karakeep)
+(previously Hoarder), a self-hostable "read-it-later" bookmark manager. Same
+bookmarking engine underneath — crawling, archiving, AI tagging and
+summarisation, search, sync, the API, the mobile and browser clients — that's
+all Karakeep's, unchanged. This fork does not add engine features. It replaces
+the layer you look at: a denser list, a reading-focused detail view, a runtime
+theme system, and a consistent visual language across the dashboard and
+settings.
 
-- **Frontend:** Next.js, React, TypeScript, Tailwind CSS
-- **Backend:** Hono (a lightweight web framework), tRPC
-- **Database:** Drizzle ORM (likely with a relational database like PostgreSQL or SQLite)
+**Design mission, treat as fixed unless the user says otherwise:** no
+thumbnails or image previews anywhere. Saved items are represented entirely by
+their AI-generated title and AI summary, so the list reads like a briefing,
+not a gallery.
+
+## Design system — source of truth, read before touching any dashboard UI
+
+- **`design/README.md`** — the full token spec: colour (default + alternate
+  theme tones), typography scale, spacing, radius, and the elevation rule
+  ("no shadows — surfaces separate by border and background-step only, keep
+  it that way"). This is the design intent; treat its token tables as
+  authoritative over any stray inline value elsewhere.
+- **`apps/web/lib/dense/theme.ts`** — those tokens made real as
+  runtime-switchable presets (accent / surface tone / reading emphasis). The
+  file's own header comment states its values are transcribed from
+  `design/README.md`, nothing invented. Keep that contract: a token change
+  starts in `design/README.md`, then gets mirrored here — never the reverse.
+- **`apps/web/app/dashboard/dense-theme.css`** — the CSS custom-property
+  defaults / classes those presets override.
+- **`design/presets/`** and the Figma export in `design/figma_keepsake_final/`
+  — reference mockups for screens not yet built (mobile UI, search/filter).
+  Check there before inventing a new layout from scratch.
+
+## Project overview (upstream Karakeep — unchanged by this fork)
+
+Karakeep is a monorepo managed with Turborepo. Tech stack:
+
+- **Frontend:** Next.js, React, TypeScript, Tailwind CSS, shadcn/ui
+- **Backend:** Hono, tRPC
+- **Database:** Drizzle ORM
 - **Tooling:** Oxfmt, oxlint, Vitest, pnpm
-
-## Project Structure
-
-The project is organized into `apps` and `packages`:
 
 ### Applications (`apps/`)
 
-- **`web`:** The main web application, built with Next.js.
-- **`browser-extension`:** A browser extension, likely for saving content to karakeep.
-- **`cli`:** A command-line interface for interacting with the service.
-- **`landing`:** A landing page for the project.
-- **`mobile`:** A mobile application (details unknown).
-- **`mcp`:** The Model Context Protocol (MCP) server to communicate with Karakeep.
-- **`workers`:** Background workers for processing tasks.
+- **`web`:** The main web application (Next.js) — this is where Keepsake's UI
+  work happens. shadcn components live in `apps/web/components/ui`.
+- **`browser-extension`:** Saves content to Karakeep from the browser.
+- **`cli`:** Command-line interface for the service.
+- **`landing`:** Landing page.
+- **`mobile`:** Mobile app (Expo).
+- **`mcp`:** Model Context Protocol server for talking to Karakeep.
+- **`workers`:** Background processing.
 
 ### Packages (`packages/`)
 
-- **`api`:** The main API, built with Hono and tRPC.
-- **`db`:** Database schema and migrations, using Drizzle ORM.
-- **`e2e_tests`:** End-to-end tests for the project.
-- **`open-api`:** OpenAPI specifications for the API.
-- **`sdk`:** A software development kit for interacting with the API.
-- **`shared`:** Shared code and types between packages.
-- **`shared-react`:** Shared React components and hooks.
-- **`shared-server`:** Shared logic that's meant to be used on the server-side.
-- **`trpc`:** tRPC router and procedures. Most of the business logic is here.
+- **`api`:** Hono + tRPC API.
+- **`db`:** Schema and migrations (Drizzle ORM).
+- **`e2e_tests`:** End-to-end tests.
+- **`open-api`:** OpenAPI specs.
+- **`sdk`:** SDK for the API.
+- **`shared`** / **`shared-react`** / **`shared-server`:** Code shared across
+  packages, by layer.
+- **`trpc`:** tRPC router and procedures — most business logic lives here.
 
 ### Docs
 
-- **docs/docs/03-configuration.md**: Explains configuration options for the project.
+- `docs/docs/03-configuration.md` — configuration options.
 
-## Development Workflow
+## Common commands
 
-- **Package Manager:** pnpm
-- **Build System:** Turborepo
-- **Code Formatting:** Oxfmt
-- **Linting:** oxlint
-- **Testing:** Vitest
-
-## Other info
-
-- This project uses shadcn/ui. The shadcn components in the web app are in `packages/web/components/ui`.
-- This project uses Tailwind CSS.
-- For the mobile app, we use [expo](https://expo.dev/).
-
-### Common Commands
-
-- `pnpm typecheck`: Typecheck the codebase.
-- `pnpm lint`: Lint the codebase.
-- `pnpm lint:fix`: Fix linting issues.
-- `pnpm format`: Format the codebase.
-- `pnpm format:fix`: Fix formatting issues.
-- `pnpm test`: Run tests.
-- `pnpm db:generate --name description_of_schema_change`: db migration after making schema changes
-
-Starting services:
-- `pnpm web`: Start the web application (this doesn't return, unless you kill it).
-- `pnpm workers`: Starts the background workers (this doesn't return, unless you kill it).
+- `pnpm typecheck` / `pnpm lint` / `pnpm lint:fix` / `pnpm format` /
+  `pnpm format:fix` / `pnpm test`
+- `pnpm db:generate --name description_of_schema_change` — after a schema
+  change
+- `pnpm web` / `pnpm workers` — start a service (foreground, doesn't return)

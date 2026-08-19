@@ -4,8 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ActionButton } from "@/components/ui/action-button";
 import ActionConfirmingDialog from "@/components/ui/action-confirming-dialog";
-import { badgeVariants } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
@@ -13,19 +11,11 @@ import {
 } from "@/components/ui/collapsible";
 import { toast } from "@/components/ui/sonner";
 import LoadingSpinner from "@/components/ui/spinner";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useTranslation } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { distance } from "fastest-levenshtein";
-import { Check, Combine, X } from "lucide-react";
+import { Check, ChevronDown, Combine, X } from "lucide-react";
 
 import { useMergeTag } from "@karakeep/shared-react/hooks/tags";
 import { useTRPC } from "@karakeep/shared-react/trpc";
@@ -57,6 +47,11 @@ const useSuggestions = () => {
   return { suggestions, updateMergeInto, deleteSuggestion, setSuggestions };
 };
 
+/**
+ * Kept as a plain shadcn dialog (unstyled for dense) rather than restyled —
+ * confirmation modals are a separate, app-wide concern shared by other
+ * destructive actions, not part of this screen's list/row language.
+ */
 function ApplyAllButton({ suggestions }: { suggestions: Suggestion[] }) {
   const { t } = useTranslation();
   const [applying, setApplying] = useState(false);
@@ -107,14 +102,24 @@ function ApplyAllButton({ suggestions }: { suggestions: Suggestion[] }) {
         </ActionButton>
       )}
     >
-      <Button variant="destructive">
-        <Check className="mr-2 size-4" />
+      <button
+        type="button"
+        className="border-k-border bg-k-surface-1 text-k-fg-muted hover:text-k-fg flex h-[28px] flex-none items-center gap-[8px] rounded-[8px] border px-[12px] text-[12.5px]"
+      >
+        <Check size={15} strokeWidth={1.75} />
         {t("actions.apply_all")}
-      </Button>
+      </button>
     </ActionConfirmingDialog>
   );
 }
 
+/**
+ * One suggestion group. Deliberately not the shadcn `Table` the original
+ * used — a bordered/striped table is exactly the generic-admin-panel look
+ * the design research flags, and every other dense list in this fork is a
+ * flat row separated by `border-t` (DenseHighlightRow, DenseBookmarkRow),
+ * so this follows that instead of inventing a second row language.
+ */
 function SuggestionRow({
   suggestion,
   updateMergeInto,
@@ -139,41 +144,42 @@ function SuggestionRow({
     },
   });
   return (
-    <TableRow key={suggestion.mergeIntoId}>
-      <TableCell className="flex flex-wrap gap-1">
-        {suggestion.tags.map((tag, idx) => {
+    <div className="border-k-border-soft flex flex-wrap items-center gap-[12px] border-t px-[18px] py-[12px]">
+      <div className="flex min-w-0 flex-1 flex-wrap gap-[6px]">
+        {suggestion.tags.map((tag) => {
           const selected = suggestion.mergeIntoId == tag.id;
           return (
-            <div key={idx} className="group relative">
+            <div key={tag.id} className="group relative">
               <Link
                 href={`/dashboard/tags/${tag.id}`}
                 className={cn(
-                  badgeVariants({ variant: "outline" }),
-                  "text-sm",
+                  "rounded-[6px] border px-[9px] py-[4px] text-[11.5px]",
                   selected
-                    ? "border border-blue-500 dark:border-blue-900"
-                    : null,
+                    ? "border-k-accent-border text-k-fg bg-k-border-soft"
+                    : "border-k-border text-k-fg-muted hover:text-k-fg-soft",
                 )}
               >
                 {tag.name}
               </Link>
-              <Button
-                size="none"
-                className={cn(
-                  "-translate-1/2 absolute -right-1.5 -top-1.5 rounded-full p-0.5",
-                  selected ? null : "hidden group-hover:block",
-                )}
-                onClick={() => updateMergeInto(suggestion, tag.id)}
-              >
-                <Check className="size-3" />
-              </Button>
+              {!selected && (
+                <button
+                  type="button"
+                  aria-label={`Keep ${tag.name}`}
+                  onClick={() => updateMergeInto(suggestion, tag.id)}
+                  className="bg-k-accent text-k-accent-fg absolute -right-1.5 -top-1.5 hidden size-[15px] items-center justify-center rounded-full group-hover:flex"
+                >
+                  <Check size={9} strokeWidth={2.5} />
+                </button>
+              )}
             </div>
           );
         })}
-      </TableCell>
-      <TableCell className="space-x-1 space-y-1 text-center">
-        <ActionButton
-          loading={isPending}
+      </div>
+
+      <div className="flex flex-none items-center gap-[6px]">
+        <button
+          type="button"
+          disabled={isPending}
           onClick={() =>
             mutate({
               intoTagId: suggestion.mergeIntoId,
@@ -182,24 +188,29 @@ function SuggestionRow({
                 .map((t) => t.id),
             })
           }
+          className={cn(
+            "border-k-border bg-k-surface-1 text-k-fg-muted hover:text-k-fg flex h-[26px] items-center gap-[6px] rounded-[7px] border px-[10px] text-[11.5px]",
+            isPending && "opacity-50",
+          )}
         >
-          <Combine className="mr-2 size-4" />
-          {t("actions.merge")}
-        </ActionButton>
-
-        <Button
-          variant={"secondary"}
+          <Combine size={13} strokeWidth={1.75} />
+          {isPending ? "Merging…" : t("actions.merge")}
+        </button>
+        <button
+          type="button"
           onClick={() => deleteSuggestion(suggestion)}
+          aria-label={t("actions.ignore")}
+          className="text-k-fg-dim hover:text-k-fg-muted flex h-[26px] items-center justify-center rounded-[7px] px-[6px]"
         >
-          <X className="mr-2 size-4" />
-          {t("actions.ignore")}
-        </Button>
-      </TableCell>
-    </TableRow>
+          <X size={13} strokeWidth={1.75} />
+        </button>
+      </div>
+    </div>
   );
 }
 
 export function TagDuplicationDetection() {
+  const { t } = useTranslation();
   const api = useTRPC();
   const [expanded, setExpanded] = useState(false);
   let { data: allTags } = useQuery(
@@ -244,35 +255,69 @@ export function TagDuplicationDetection() {
   }, [allTags]);
 
   if (!allTags) {
-    return <LoadingSpinner />;
+    return (
+      <div className="flex items-center justify-center py-24">
+        <LoadingSpinner />
+      </div>
+    );
   }
 
   return (
-    <Collapsible open={expanded} onOpenChange={setExpanded}>
-      You have {suggestions.length} suggestions for tag merging.
-      {suggestions.length > 0 && (
-        <CollapsibleTrigger asChild>
-          <Button variant="link" size="sm">
-            {expanded ? "Hide All" : "Show All"}
-          </Button>
-        </CollapsibleTrigger>
-      )}
-      <CollapsibleContent>
-        <p className="text-sm italic text-muted-foreground">
-          For every suggestion, select the tag that you want to keep and other
-          tags will be merged into it.
-        </p>
-        {suggestions.length > 0 && (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Tags</TableHead>
-                <TableHead className="text-center">
-                  <ApplyAllButton suggestions={suggestions} />
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+    // Same shell as AllHighlights/DenseFilesView: cancels the dashboard
+    // shell's p-4, caps width, header row owns the section label + meta
+    // line + right-aligned controls. One Collapsible root spans the trigger
+    // (in the header) and the content (below) — they don't need to be
+    // adjacent, just both descendants of the same root.
+    <Collapsible
+      open={expanded}
+      onOpenChange={setExpanded}
+      className="-m-4 flex flex-col"
+    >
+      <div className="flex w-full max-w-[1400px] flex-col">
+        <div className="flex items-center gap-[14px] px-[22px] pb-[12px] pt-[15px]">
+          <div className="flex flex-col gap-[3px]">
+            <h1 className="text-k-section-label text-[15px] font-semibold uppercase tracking-[0.06em]">
+              {t("cleanups.cleanups")}
+            </h1>
+            <p className="font-k-mono text-k-fg-dim text-[11.5px]">
+              {t("cleanups.duplicate_tags.title")} · {suggestions.length}{" "}
+              suggestion{suggestions.length === 1 ? "" : "s"}
+            </p>
+          </div>
+
+          {suggestions.length > 0 && (
+            <div className="ml-auto flex items-center gap-[10px]">
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="font-k-mono text-k-fg-dim hover:text-k-fg-muted flex items-center gap-[4px] text-[11px] uppercase tracking-[0.06em]"
+                >
+                  {expanded ? "Hide all" : "Show all"}
+                  <ChevronDown
+                    size={12}
+                    className={cn(
+                      "transition-transform",
+                      expanded && "rotate-180",
+                    )}
+                  />
+                </button>
+              </CollapsibleTrigger>
+              <ApplyAllButton suggestions={suggestions} />
+            </div>
+          )}
+        </div>
+
+        {suggestions.length === 0 ? (
+          <p className="text-k-fg-dim px-[22px] py-[14px] text-[12.5px]">
+            No duplicate tags found.
+          </p>
+        ) : (
+          <CollapsibleContent>
+            <p className="text-k-fg-dim px-[22px] pb-[10px] text-[12px]">
+              For every suggestion, pick the tag to keep — the rest merge into
+              it.
+            </p>
+            <div className="flex flex-col">
               {suggestions.map((suggestion) => (
                 <SuggestionRow
                   key={suggestion.mergeIntoId}
@@ -281,10 +326,10 @@ export function TagDuplicationDetection() {
                   deleteSuggestion={deleteSuggestion}
                 />
               ))}
-            </TableBody>
-          </Table>
+            </div>
+          </CollapsibleContent>
         )}
-      </CollapsibleContent>
+      </div>
     </Collapsible>
   );
 }

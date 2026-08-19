@@ -1,8 +1,12 @@
 import { notFound } from "next/navigation";
-import Bookmarks from "@/components/dashboard/bookmarks/Bookmarks";
+import DenseFiles from "@/components/dashboard/dense/DenseFiles";
 import { api } from "@/server/api/client";
 import { TRPCError } from "@trpc/server";
 
+// Was the only remaining caller of the pre-fork Bookmarks.tsx +
+// UpdatableBookmarksGrid.tsx pair — every other filtered view (Archive,
+// Favourites, Lists, Tags) already runs on DenseFiles, so this swaps to the
+// same component instead of reskinning a component nothing else uses.
 export default async function FeedPage(props: {
   params: Promise<{ feedId: string }>;
 }) {
@@ -20,11 +24,12 @@ export default async function FeedPage(props: {
   }
 
   return (
-    <Bookmarks
+    <DenseFiles
+      label={feed.name}
       query={{ rssFeedId: feed.id }}
-      showDivider={true}
-      showEditorCard={false}
-      header={<div className="text-2xl">{feed.name}</div>}
+      // Matches the old showEditorCard={false}: a feed's contents come from
+      // the RSS source, not manual add.
+      disableAdd={true}
     />
   );
 }
