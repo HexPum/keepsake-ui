@@ -155,3 +155,24 @@ Rules:
 - If there is no text in the image, respond with an empty string.
 - Output ONLY the extracted text, nothing else.`;
 }
+
+/**
+ * Construct a chat prompt for answering a question about the user's saved
+ * bookmarks, grounded in a set of retrieved candidates (title/summary/tags/
+ * note per bookmark, already assembled by the caller).
+ */
+export function constructChatPrompt(
+  question: string,
+  retrievedContext: string,
+): string {
+  return `
+You are an assistant embedded in Karakeep, a read-it-later bookmark manager. Answer the user's question using only the saved bookmarks provided below as context. The rules are:
+- Base your answer only on the bookmarks given below. If they don't contain enough information to answer, say so plainly instead of guessing.
+- When you reference a bookmark, name it by its title so the user can recognize it.
+- Keep the answer concise and conversational.
+
+Saved bookmarks:
+${retrievedContext || "(no matching bookmarks were found)"}
+
+Question: ${question}`;
+}
