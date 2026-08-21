@@ -282,13 +282,16 @@ export default function DenseFilesView({
                   <div
                     className={cn(
                       CONTROL_SHELL,
-                      "focus-within:border-k-accent gap-2 px-[10px]",
+                      "focus-within:border-k-accent group gap-2 px-[10px]",
                     )}
                   >
+                    {/* Accent tint tracks real focus (group-focus-within),
+                        not just "the box is open" — so it fades back once
+                        you tab/click away without closing the box. */}
                     <Search
                       size={15}
                       strokeWidth={1.75}
-                      className="text-k-accent flex-none"
+                      className="text-k-fg-dim group-focus-within:text-k-accent flex-none"
                     />
                     <input
                       ref={searchInputRef}
@@ -299,7 +302,12 @@ export default function DenseFilesView({
                       }}
                       placeholder={`Search ${label.toLowerCase()}…`}
                       aria-label="Search bookmarks"
-                      className="text-k-fg placeholder:text-k-fg-dim w-[200px] bg-transparent text-[12.5px] outline-none"
+                      // k-search-input: opts out of the fork-wide
+                      // :focus-visible ring (dense-theme.css) — this pill's
+                      // own focus-within border is the focus affordance;
+                      // the ring duplicated it as a second, inner highlight
+                      // crowded inside the same small control.
+                      className="k-search-input text-k-fg placeholder:text-k-fg-dim w-[200px] bg-transparent text-[12.5px] outline-none"
                     />
                     <button
                       type="button"
@@ -321,7 +329,7 @@ export default function DenseFilesView({
                     }}
                     className={cn(
                       CONTROL_SHELL,
-                      "gap-2 px-[12px] text-[12.5px]",
+                      "hover:text-k-fg hover:border-k-accent-border gap-2 px-[12px] text-[12.5px]",
                     )}
                   >
                     <Search size={15} strokeWidth={1.75} />
@@ -507,10 +515,10 @@ export default function DenseFilesView({
                   aria-pressed={view === "list"}
                   onClick={() => setView("list")}
                   className={cn(
-                    "flex size-[20px] items-center justify-center rounded-[5px]",
+                    "flex size-[20px] items-center justify-center rounded-[5px] transition-colors",
                     view === "list"
                       ? "bg-k-accent text-k-accent-fg"
-                      : "text-k-fg-muted",
+                      : "text-k-fg-muted hover:text-k-fg hover:bg-k-border-soft/60",
                   )}
                 >
                   <ListIcon size={13} strokeWidth={2} />
@@ -521,10 +529,10 @@ export default function DenseFilesView({
                   aria-pressed={view === "grid"}
                   onClick={() => setView("grid")}
                   className={cn(
-                    "flex size-[20px] items-center justify-center rounded-[5px]",
+                    "flex size-[20px] items-center justify-center rounded-[5px] transition-colors",
                     view === "grid"
                       ? "bg-k-accent text-k-accent-fg"
-                      : "text-k-fg-muted",
+                      : "text-k-fg-muted hover:text-k-fg hover:bg-k-border-soft/60",
                   )}
                 >
                   <LayoutGrid size={13} strokeWidth={2} />

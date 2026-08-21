@@ -81,3 +81,14 @@ export function estimateReadingTimeMinutes(summary: string | null | undefined) {
   const minutes = Math.max(1, Math.round((words / WORDS_PER_MINUTE) * 6));
   return minutes;
 }
+
+/**
+ * Reading time from an exact word count — used by the detail view, which has
+ * real body text to count (unlike estimateReadingTimeMinutes above, whose 6x
+ * scale-up compensates for its input being only the short AI summary). Plain
+ * words / WORDS_PER_MINUTE, no proxy multiplier.
+ */
+export function estimateReadingTimeFromWordCount(words: number) {
+  if (words <= 0) return null;
+  return Math.max(1, Math.round(words / WORDS_PER_MINUTE));
+}

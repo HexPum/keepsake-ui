@@ -18,20 +18,35 @@ const SECTION_LABEL =
   "font-k-mono text-k-fg-dim text-[10px] font-medium uppercase tracking-[0.08em]";
 
 /**
- * The sidebar's collapsed-rail bookmark glyph (DenseSidebar.tsx), reused
- * here only for the empty state's big centered mark. Inlined rather than
- * shared: it's a 6-line decorative glyph used in exactly two places.
+ * The empty-state centerpiece: the hex glyph (same public/brand/hex-glyph.png
+ * asset as DenseSidebar's brand mark) stacked over a "HEX - OS" wordmark, per
+ * hex-os-simple-ref.png. Simple and static on purpose — a first version of
+ * this (a framed CRT-monitor jpg with a scanline overlay + flicker
+ * animation) read as too busy; this v2 is a plain, native-looking hero with
+ * no animation of any kind.
+ *
+ * The glyph is drawn via `.hex-os-mark` (dense-theme.css) — a CSS mask
+ * using the PNG's alpha with `background-color: var(--k-fg)`, rather than
+ * an <img>: the source raster is baked white, which would look wrong (or
+ * simply wrong-toned) against a non-default surface/accent combination, so
+ * masking lets the shape stay token-driven and recolour with the rest of
+ * the UI instead of being a fixed white bitmap. The wordmark is real text
+ * (font-k-mono) for the same reason — themeable, selectable, no asset.
+ *
+ * TODO(hex-os-boot): the original dispatch's stretch goal — when the user
+ * submits a query, transition the whole chat into a themed "booting into
+ * HEX-OS" effect — is still NOT implemented. Still deferred, now doubly so
+ * since the CRT visual it would have played off of is gone; flagged for
+ * whoever scopes a v3. sendMessage() below is unchanged.
  */
-function KeepsakeMark({ className }: { className?: string }) {
+function HexOsHero() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <path
-        d="M4 3h16v18l-8-5-8 5V3Z"
-        stroke="currentColor"
-        strokeWidth={1.7}
-        strokeLinejoin="round"
-      />
-    </svg>
+    <div className="flex flex-col items-center gap-[18px]">
+      <span aria-hidden className="hex-os-mark size-[72px] flex-none" />
+      <p className="font-k-mono text-k-fg text-[24px] font-medium uppercase tracking-[0.1em]">
+        HEX&nbsp;&ndash;&nbsp;OS
+      </p>
+    </div>
   );
 }
 
@@ -155,15 +170,21 @@ export default function DenseChat() {
     );
   }
 
-  // Same reasoning as the gated state above: no bounded height is available
-  // here, so rather than a `flex-1 overflow-y-auto` message pane with a
-  // `flex-none` input bar competing for a fixed budget, `<main>` is left as
-  // the actual scroller (exactly how DenseBookmarkDetail's full-page route
-  // works) and the input bar sticks to the viewport bottom via
-  // `position: sticky` instead of flex layout.
+  // On desktop, `sm:flex-1 sm:min-h-0` makes this root a genuine, bounded
+  // flex item of dashboard/layout.tsx's now-height-bridged wrapper (see the
+  // comment there) — filling exactly `<main>`'s visible height rather than
+  // sizing to its own content, ChatGPT/Claude-style: the message/hero pane
+  // below grows to fill that space and scrolls internally, the input bar
+  // sits as a true flex-none footer at the bottom edge, no dead space below
+  // it. `min-h-0` overrides flexbox's default `min-height: auto`, which
+  // would otherwise stop this from shrinking below its content size and
+  // defeat the inner pane's own scrolling. Below `sm:`, none of this
+  // applies — the ancestor chain isn't height-bound there either (mobile's
+  // own scroll model, untouched), so this falls back to exactly the old
+  // content-sized, page-scrolls behaviour.
   return (
-    <div className="bg-k-bg flex flex-col">
-      <div className="border-k-border bg-k-bg sticky top-0 z-10 flex items-center justify-between border-b px-[22px] py-[13px]">
+    <div className="bg-k-bg flex flex-col sm:min-h-0 sm:flex-1">
+      <div className="border-k-border bg-k-bg sticky top-0 z-10 flex flex-none items-center justify-between border-b px-[22px] py-[13px]">
         <p className={SECTION_LABEL}>Chat</p>
         {messages.length > 0 && (
           <button
@@ -181,11 +202,13 @@ export default function DenseChat() {
         )}
       </div>
 
-      <div className="px-[22px] py-[18px]">
+      <div className="px-[22px] py-[18px] sm:min-h-0 sm:flex-1 sm:overflow-y-auto">
         {messages.length === 0 ? (
-          <div className="text-k-fg-dim flex flex-col items-center gap-[6px] py-[100px] text-center text-[13px]">
-            <KeepsakeMark className="text-k-fg-dim size-[20px]" />
-            <p>Ask about anything you&apos;ve saved to Keepsake.</p>
+          <div className="flex flex-col items-center justify-center gap-[16px] py-[36px] text-center sm:h-full sm:py-0">
+            <HexOsHero />
+            <p className="text-k-fg-dim text-[13px]">
+              Ask about anything you&apos;ve saved to Keepsake.
+            </p>
           </div>
         ) : (
           <div className="mx-auto flex max-w-[640px] flex-col">
@@ -209,7 +232,7 @@ export default function DenseChat() {
         )}
       </div>
 
-      <div className="border-k-border bg-k-bg sticky bottom-0 z-10 border-t px-[22px] py-[14px]">
+      <div className="border-k-border bg-k-bg sticky bottom-0 z-10 flex-none border-t px-[22px] py-[14px]">
         <div className="mx-auto flex max-w-[640px] items-end gap-[10px]">
           <Textarea
             value={input}

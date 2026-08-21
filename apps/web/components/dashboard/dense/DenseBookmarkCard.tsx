@@ -36,7 +36,7 @@ export function DenseBookmarkCard({
   return (
     <div
       {...navigate}
-      className="border-k-border bg-k-surface-1 group relative flex cursor-pointer flex-col gap-2 rounded-[12px] border p-[16px_17px]"
+      className="border-k-border hover:border-k-accent-border bg-k-surface-1 group relative flex cursor-pointer flex-col gap-2 rounded-[12px] border p-[16px_17px] transition-colors"
     >
       <div className="relative z-10 flex items-center">
         {source && (

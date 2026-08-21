@@ -29,7 +29,7 @@ const DESIGN_HEIGHT = 625;
 
 export const MIN_SCALE = 0.85;
 export const MAX_SCALE = 2.5;
-const AUTO_MAX_SCALE = 1.3;
+export const AUTO_MAX_SCALE = 1.3;
 const STORAGE_KEY = "k-dense-scale";
 
 export type ScalePreference = "auto" | number;

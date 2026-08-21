@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import ProfileOptions from "@/components/dashboard/header/ProfileOptions";
 import { EditListModal } from "@/components/dashboard/lists/EditListModal";
 import { topicColorsFor } from "@/lib/dense/theme";
+import { useSidebarCollapsed } from "@/lib/dense/useSidebarCollapsed";
 import { cn } from "@/lib/utils";
 import {
   Archive,
@@ -15,8 +17,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
-  Search,
   Settings,
+  Sparkles,
   Star,
 } from "lucide-react";
 
@@ -25,29 +27,6 @@ import type { ZGetTagResponse } from "@karakeep/shared/types/tags";
 import { useBookmarkLists } from "@karakeep/shared-react/hooks/lists";
 
 import { useDenseThemeContext } from "./DenseThemeController";
-
-const SIDEBAR_COLLAPSED_KEY = "k-dense-sidebar-collapsed";
-
-function useSidebarCollapsed() {
-  // Default to expanded on the server render; sync with the persisted
-  // choice right after mount so we don't need access to localStorage
-  // during SSR.
-  const [collapsed, setCollapsed] = useState(false);
-  useEffect(() => {
-    const stored = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
-    if (stored !== null) {
-      setCollapsed(stored === "1");
-    }
-  }, []);
-  const toggle = () => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
-      return next;
-    });
-  };
-  return { collapsed, toggle };
-}
 
 const SECTION_FOLD_KEY = "k-dense-sidebar-fold:";
 
@@ -77,21 +56,24 @@ function useSectionFold(section: string) {
 /**
  * A foldable sidebar section (Lists, Tags).
  *
- * The label and its chevron are one button rather than a label sitting next
- * to a separate chevron control: a chevron beside a heading reads as "click
- * the heading to fold", so making only the chevron work would send anyone
- * who clicks the word somewhere unexpected. `action` is for controls that
- * belong to the section itself (Lists' "new list" +) and stays reachable
- * while folded.
+ * The label and its chevron used to be one button (click either to fold) —
+ * but that left no way to reach the section's own full-index page from the
+ * sidebar. Split instead: the label is a real link to `headerHref` (Lists'
+ * or Tags' full page), and the chevron is its own small toggle button for
+ * fold/unfold, so both affordances stay reachable without either shadowing
+ * the other. `action` is for controls that belong to the section itself
+ * (Lists' "new list" +) and stays reachable while folded.
  */
 function SidebarSection({
   id,
   label,
+  headerHref,
   action,
   children,
 }: {
   id: string;
   label: string;
+  headerHref: string;
   action?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -99,15 +81,21 @@ function SidebarSection({
   const contentId = `sidebar-section-${id}`;
   return (
     <div className="flex flex-col gap-px text-[12.5px]">
-      <div className="flex items-center px-2 pb-[5px]">
+      <div className="flex items-center gap-[3px] px-2 pb-[5px]">
+        <Link
+          href={headerHref}
+          className="font-k-mono text-k-fg-dim hover:text-k-fg-muted text-[10px] font-medium uppercase tracking-[0.08em] transition-colors"
+        >
+          {label}
+        </Link>
         <button
           type="button"
           onClick={toggle}
           aria-expanded={!folded}
           aria-controls={contentId}
-          className="font-k-mono text-k-fg-dim hover:text-k-fg-muted flex items-center gap-[3px] text-[10px] font-medium uppercase tracking-[0.08em] transition-colors"
+          aria-label={`${folded ? "Expand" : "Collapse"} ${label}`}
+          className="text-k-fg-dim hover:text-k-fg-muted hover:bg-k-border-soft/60 -m-[2px] flex items-center justify-center rounded-[4px] p-[2px] transition-colors"
         >
-          {label}
           <ChevronDown
             size={11}
             strokeWidth={2.25}
@@ -126,18 +114,6 @@ function SidebarSection({
         {children}
       </div>
     </div>
-  );
-}
-
-/** Link to a section's full index page — the sidebar only ever shows 8. */
-function SectionAllLink({ href, label }: { href: string; label: string }) {
-  return (
-    <Link
-      href={href}
-      className="text-k-fg-dim/70 hover:text-k-fg-muted block px-2 py-[5px] text-[11px]"
-    >
-      {label}
-    </Link>
   );
 }
 
@@ -160,7 +136,7 @@ function NavRow({
           "flex items-center gap-[9px] rounded-[6px] px-2 py-[5px] transition-colors",
           active
             ? "bg-k-border-soft text-k-fg [&_svg]:text-k-accent font-medium"
-            : "text-k-fg-muted hover:bg-k-border-soft/60 [&_svg]:text-k-icon",
+            : "text-k-fg-muted hover:bg-k-border-soft [&_svg]:text-k-icon",
         )}
       >
         {icon}
@@ -184,8 +160,10 @@ function RailIcon({
   onClick?: () => void;
 }) {
   const cls = cn(
-    "flex items-center justify-center",
-    tone === "accent" ? "text-k-accent" : "text-k-icon hover:text-k-fg-muted",
+    "-m-[4px] flex items-center justify-center rounded-[6px] p-[4px] transition-colors",
+    tone === "accent"
+      ? "text-k-accent"
+      : "text-k-icon hover:text-k-fg-muted hover:bg-k-border-soft/60",
   );
   if (onClick) {
     return (
@@ -207,20 +185,68 @@ function RailIcon({
   );
 }
 
+/**
+ * The hex rebrand glyph (design/presets/fixes/hex-logo-transparent.png —
+ * white on transparent, so it sits correctly on the dark bg as-is, no
+ * recolouring needed). The source canvas has a lot of empty space to the
+ * right of the mark itself (built for pairing with a wordmark at a fixed
+ * offset); cropped down to just the glyph here with `object-cover` +
+ * `object-left` in a fixed-size box rather than pre-cropping the asset, so
+ * the one file works at both sizes this component is used at (rail icon,
+ * expanded-panel brand mark) without shipping two crops.
+ */
+function HexGlyph({ className }: { className?: string }) {
+  return (
+    <span className={cn("inline-block overflow-hidden", className)}>
+      <Image
+        src="/brand/hex-glyph.png"
+        alt=""
+        aria-hidden
+        width={602}
+        height={249}
+        className="h-full w-full object-cover object-left"
+      />
+    </span>
+  );
+}
+
 export default function DenseSidebar({
-  searchEnabled,
   initialLists,
   initialTags,
   serverVersion,
 }: {
-  searchEnabled: boolean;
   initialLists: ZBookmarkList[];
   initialTags: ZGetTagResponse[];
   serverVersion?: string;
 }) {
   const pathname = usePathname();
-  const { collapsed, toggle } = useSidebarCollapsed();
+  const { collapsed, ready, toggle } = useSidebarCollapsed();
   const [newListOpen, setNewListOpen] = useState(false);
+
+  // Focus continuity across a toggle: activating either toggle button makes
+  // it `inert` (it now lives in the panel that's about to hide), which drops
+  // focus to <body> and strands a keyboard user. `toggleInitiatedByUser`
+  // distinguishes a real click from the mount-time hydration effect also
+  // changing `collapsed` — only the former should steal focus. Set in the
+  // click handler, read and cleared by the effect below, which fires after
+  // `collapsed` actually changes.
+  const expandedToggleRef = useRef<HTMLButtonElement>(null);
+  const railToggleRef = useRef<HTMLButtonElement>(null);
+  const toggleInitiatedByUser = useRef(false);
+
+  const handleToggle = () => {
+    toggleInitiatedByUser.current = true;
+    toggle();
+  };
+
+  useEffect(() => {
+    if (!toggleInitiatedByUser.current) return;
+    toggleInitiatedByUser.current = false;
+    const target = collapsed
+      ? railToggleRef.current
+      : expandedToggleRef.current;
+    target?.focus({ preventScroll: true });
+  }, [collapsed]);
   const { preference: theme } = useDenseThemeContext();
   // Always includes the active accent, so a list's dot changes when the
   // theme does rather than only ever showing two fixed companion colours.
@@ -245,21 +271,14 @@ export default function DenseSidebar({
     [listsData, initialLists],
   );
 
+  // No standalone "Search" nav entry — it's redundant with Files, which
+  // has its own inline search box (⌘/Ctrl-K) covering the same ground.
   const navItems = [
     {
       href: "/dashboard/bookmarks",
       label: "Files",
       icon: <Inbox size={15} strokeWidth={1.75} />,
     },
-    ...(searchEnabled
-      ? [
-          {
-            href: "/dashboard/search",
-            label: "Search",
-            icon: <Search size={15} strokeWidth={1.75} />,
-          },
-        ]
-      : []),
     {
       href: "/dashboard/favourites",
       label: "Favourites",
@@ -270,34 +289,194 @@ export default function DenseSidebar({
       label: "Archive",
       icon: <Archive size={15} strokeWidth={1.75} />,
     },
+    {
+      href: "/dashboard/chat",
+      label: "Chat",
+      icon: <Sparkles size={15} strokeWidth={1.75} />,
+    },
   ];
 
-  if (collapsed) {
-    return (
-      <aside className="border-k-border bg-k-surface-2 flex h-full w-[40px] flex-none flex-col items-center gap-[18px] border-r py-[14px]">
+  return (
+    <aside
+      data-ready={ready ? "true" : "false"}
+      className={cn(
+        "k-sidebar border-k-border bg-k-surface-2 relative h-full flex-none overflow-hidden border-r",
+        collapsed ? "w-[58px]" : "w-[153px]",
+      )}
+    >
+      {/* Expanded panel — fixed at its own content-box width regardless of
+          `collapsed`, so the container (not the panel) owns the transition
+          and this content never reflows mid-toggle. */}
+      <div
+        data-active={!collapsed ? "true" : "false"}
+        inert={collapsed}
+        className="k-sidebar-panel absolute inset-y-0 left-0 flex w-[152px] flex-col p-[14px_10px]"
+      >
+        {/* Brand row — hex glyph + wordmark, collapse toggle. */}
+        <div className="flex flex-none items-center gap-[7px] px-[6px]">
+          <Link
+            href="/dashboard/bookmarks"
+            aria-label="hex"
+            className="flex flex-none items-center gap-[7px] transition-opacity hover:opacity-80"
+          >
+            <HexGlyph className="size-[22px] flex-none" />
+            <span className="font-k-mono text-k-fg text-[19px] font-semibold tracking-[-0.02em]">
+              hex
+            </span>
+          </Link>
+          <button
+            ref={expandedToggleRef}
+            type="button"
+            aria-label="Hide sidebar"
+            aria-expanded={true}
+            onClick={handleToggle}
+            className="text-k-icon hover:text-k-fg-muted hover:bg-k-border-soft/60 -m-[4px] ml-auto flex items-center justify-center rounded-[6px] p-[4px] transition-colors"
+          >
+            <PanelLeftClose size={21} strokeWidth={1.75} />
+          </button>
+        </div>
+
+        {/* Scrollable middle. Keeping this separate from the footer means a
+            long list of lists/tags can never push settings + profile out of
+            view — they stay pinned to the bottom of the rail. */}
+        <div className="sidebar-scrollbar mt-4 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+          <ul className="flex flex-col gap-px text-[12.5px]">
+            {navItems.map((item) => (
+              <NavRow
+                key={item.href}
+                href={item.href}
+                icon={item.icon}
+                label={item.label}
+                active={pathname === item.href}
+              />
+            ))}
+          </ul>
+
+          {/* Lists. Always rendered — it carries the "create list" affordance
+              and the link to the full lists page, so it must be reachable
+              even when the user has no lists yet. */}
+          <SidebarSection
+            id="lists"
+            label="Lists"
+            headerHref="/dashboard/lists"
+            action={
+              <button
+                type="button"
+                aria-label="New list"
+                title="New list"
+                onClick={() => setNewListOpen(true)}
+                className="text-k-fg-dim hover:text-k-fg-muted hover:bg-k-border-soft/60 -m-[3px] flex items-center justify-center rounded-[4px] p-[3px] transition-colors"
+              >
+                <Plus size={13} strokeWidth={2} />
+              </button>
+            }
+          >
+            {topLevelLists.length > 0 ? (
+              <ul className="flex flex-col gap-px">
+                {topLevelLists.slice(0, 8).map((list, i) => {
+                  const href = `/dashboard/lists/${list.id}`;
+                  const active = pathname === href;
+                  return (
+                    <li key={list.id}>
+                      <Link
+                        href={href}
+                        className={cn(
+                          "flex items-center gap-[9px] rounded-[6px] px-2 py-[5px] transition-colors",
+                          active
+                            ? "bg-k-border-soft text-k-fg font-medium"
+                            : "text-k-fg-muted hover:bg-k-border-soft",
+                        )}
+                      >
+                        <span
+                          className="size-[5px] flex-none rounded-full"
+                          style={{
+                            background: listDotColors[i % listDotColors.length],
+                          }}
+                        />
+                        <span className="truncate">{list.name}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setNewListOpen(true)}
+                className="text-k-fg-dim/70 hover:text-k-fg-muted px-2 py-[5px] text-left text-[11px]"
+              >
+                No lists yet — create one
+              </button>
+            )}
+          </SidebarSection>
+
+          {/* Tags */}
+          {initialTags.length > 0 && (
+            <SidebarSection id="tags" label="Tags" headerHref="/dashboard/tags">
+              <div className="flex flex-wrap gap-[5px] px-2 pt-[3px]">
+                {initialTags.slice(0, 8).map((tag) => (
+                  <Link
+                    key={tag.id}
+                    href={`/dashboard/tags/${tag.id}`}
+                    className="border-k-border text-k-fg-muted hover:border-k-accent-border hover:text-k-fg rounded-full border px-[7px] py-[2px] text-[11px]"
+                  >
+                    {tag.name}
+                  </Link>
+                ))}
+              </div>
+            </SidebarSection>
+          )}
+        </div>
+
+        {/* Footer — flex-none so it is always pinned above the rail's bottom
+            padding regardless of how much content is above it. */}
+        <div className="border-k-border mt-4 flex flex-none items-center gap-3 border-t pt-[10px]">
+          <Link
+            href="/settings"
+            aria-label="Settings"
+            title="Settings"
+            className="text-k-fg-dim hover:text-k-fg-muted hover:bg-k-border-soft/60 -m-[3px] flex size-[18px] items-center justify-center rounded-[5px] p-[3px] transition-colors"
+          >
+            <Settings size={18} strokeWidth={1.75} />
+          </Link>
+          <div className="text-k-fg-dim hover:text-k-fg-muted hover:bg-k-border-soft/60 -m-[3px] flex size-[18px] items-center justify-center rounded-[5px] p-[3px] transition-colors">
+            <ProfileOptions iconOnly dense />
+          </div>
+          <span className="font-k-mono text-k-version ml-auto text-[9.5px]">
+            {serverVersion ?? "dev"}
+          </span>
+        </div>
+      </div>
+
+      {/* Rail panel — fixed at its own content-box width regardless of
+          `collapsed`, same reasoning as the expanded panel above. */}
+      <div
+        data-active={collapsed ? "true" : "false"}
+        inert={!collapsed}
+        className="k-sidebar-panel absolute inset-y-0 left-0 flex w-[57px] flex-col items-center gap-[18px] py-[14px]"
+      >
         <Link
           href="/dashboard/bookmarks"
-          className="text-k-fg flex flex-none items-center justify-center"
-          aria-label="Keepsake"
+          className="flex flex-none items-center justify-center transition-opacity hover:opacity-80"
+          aria-label="hex"
         >
-          <svg viewBox="0 0 24 24" fill="none" className="size-[19px]">
-            <path
-              d="M4 3h16v18l-8-5-8 5V3Z"
-              stroke="currentColor"
-              strokeWidth={1.7}
-              strokeLinejoin="round"
-            />
-          </svg>
+          <HexGlyph className="size-[19px]" />
         </Link>
         <button
+          ref={railToggleRef}
           type="button"
           aria-label="Show sidebar"
           aria-expanded={false}
-          onClick={toggle}
-          className="text-k-icon hover:text-k-fg-muted flex flex-none items-center justify-center"
+          onClick={handleToggle}
+          className="text-k-icon hover:text-k-fg-muted hover:bg-k-border-soft/60 -m-[4px] flex flex-none items-center justify-center rounded-[6px] p-[4px] transition-colors"
         >
           <PanelLeftOpen size={17} strokeWidth={1.75} />
         </button>
+        {/* Separators flanking the primary icon cluster — groups the
+            Files/Favourites/Archive/Chat/Lists/Tags icons visually apart
+            from the brand mark above and the settings/profile footer below,
+            without a hard line: a subtle border-tone, not white. */}
+        <div aria-hidden className="bg-k-border h-px w-[26px] flex-none" />
         <nav className="flex min-h-0 flex-1 flex-col items-center gap-[15px] overflow-y-auto">
           {navItems.map((item) => (
             <RailIcon
@@ -321,161 +500,28 @@ export default function DenseSidebar({
             tone={pathname.startsWith("/dashboard/tags") ? "accent" : "dim"}
           />
         </nav>
+        <div aria-hidden className="bg-k-border h-px w-[26px] flex-none" />
         <div className="flex flex-none flex-col items-center gap-[14px]">
           <Link
             href="/settings"
             aria-label="Settings"
             title="Settings"
-            className="text-k-fg-dim hover:text-k-fg-muted flex size-[17px] items-center justify-center"
+            className="text-k-fg-dim hover:text-k-fg-muted hover:bg-k-border-soft/60 -m-[3px] flex size-[18px] items-center justify-center rounded-[5px] p-[3px] transition-colors"
           >
-            <Settings size={17} strokeWidth={1.75} />
+            <Settings size={18} strokeWidth={1.75} />
           </Link>
-          <div className="text-k-fg-dim hover:text-k-fg-muted flex size-[17px] items-center justify-center">
+          <div className="text-k-fg-dim hover:text-k-fg-muted hover:bg-k-border-soft/60 -m-[3px] flex size-[18px] items-center justify-center rounded-[5px] p-[3px] transition-colors">
             <ProfileOptions iconOnly dense />
           </div>
           <span className="font-k-mono text-k-version-rail text-[8.5px]">
             {serverVersion ?? "dev"}
           </span>
         </div>
-      </aside>
-    );
-  }
-
-  return (
-    <aside className="border-k-border bg-k-surface-2 flex h-full w-[153px] flex-none flex-col border-r p-[14px_10px]">
-      {/* Brand row — wordmark + collapse toggle only. */}
-      <div className="flex flex-none items-center gap-1 px-[6px]">
-        <Link
-          href="/dashboard/bookmarks"
-          className="text-k-fg text-[20px] font-semibold tracking-[-0.01em]"
-        >
-          Keepsake
-        </Link>
-        <button
-          type="button"
-          aria-label="Hide sidebar"
-          aria-expanded={true}
-          onClick={toggle}
-          className="text-k-icon hover:text-k-fg-muted ml-auto flex items-center justify-center"
-        >
-          <PanelLeftClose size={21} strokeWidth={1.75} />
-        </button>
       </div>
 
-      {/* Scrollable middle. Keeping this separate from the footer means a
-          long list of lists/tags can never push settings + profile out of
-          view — they stay pinned to the bottom of the rail. */}
-      <div className="sidebar-scrollbar mt-4 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
-        <ul className="flex flex-col gap-px text-[12.5px]">
-          {navItems.map((item) => (
-            <NavRow
-              key={item.href}
-              href={item.href}
-              icon={item.icon}
-              label={item.label}
-              active={pathname === item.href}
-            />
-          ))}
-        </ul>
-
-        {/* Lists. Always rendered — it carries the "create list" affordance
-            and the link to the full lists page, so it must be reachable
-            even when the user has no lists yet. */}
-        <SidebarSection
-          id="lists"
-          label="Lists"
-          action={
-            <button
-              type="button"
-              aria-label="New list"
-              title="New list"
-              onClick={() => setNewListOpen(true)}
-              className="text-k-fg-dim hover:text-k-fg-muted flex items-center justify-center"
-            >
-              <Plus size={13} strokeWidth={2} />
-            </button>
-          }
-        >
-          {topLevelLists.length > 0 ? (
-            <>
-              <ul className="flex flex-col gap-px">
-                {topLevelLists.slice(0, 8).map((list, i) => {
-                  const href = `/dashboard/lists/${list.id}`;
-                  const active = pathname === href;
-                  return (
-                    <li key={list.id}>
-                      <Link
-                        href={href}
-                        className={cn(
-                          "flex items-center gap-[9px] rounded-[6px] px-2 py-[5px] transition-colors",
-                          active
-                            ? "bg-k-border-soft text-k-fg font-medium"
-                            : "text-k-fg-muted hover:bg-k-border-soft/60",
-                        )}
-                      >
-                        <span
-                          className="size-[5px] flex-none rounded-full"
-                          style={{
-                            background: listDotColors[i % listDotColors.length],
-                          }}
-                        />
-                        <span className="truncate">{list.name}</span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-              <SectionAllLink href="/dashboard/lists" label="All lists" />
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setNewListOpen(true)}
-              className="text-k-fg-dim/70 hover:text-k-fg-muted px-2 py-[5px] text-left text-[11px]"
-            >
-              No lists yet — create one
-            </button>
-          )}
-        </SidebarSection>
-
-        {/* Tags */}
-        {initialTags.length > 0 && (
-          <SidebarSection id="tags" label="Tags">
-            <div className="flex flex-wrap gap-[5px] px-2 pt-[3px]">
-              {initialTags.slice(0, 8).map((tag) => (
-                <Link
-                  key={tag.id}
-                  href={`/dashboard/tags/${tag.id}`}
-                  className="border-k-border text-k-fg-muted hover:border-k-accent-border hover:text-k-fg rounded-full border px-[7px] py-[2px] text-[11px]"
-                >
-                  {tag.name}
-                </Link>
-              ))}
-            </div>
-            <SectionAllLink href="/dashboard/tags" label="All tags" />
-          </SidebarSection>
-        )}
-      </div>
-
-      {/* Footer — flex-none so it is always pinned above the rail's bottom
-          padding regardless of how much content is above it. */}
-      <div className="border-k-border mt-4 flex flex-none items-center gap-3 border-t pt-[10px]">
-        <Link
-          href="/settings"
-          aria-label="Settings"
-          title="Settings"
-          className="text-k-fg-dim hover:text-k-fg-muted flex size-4 items-center justify-center"
-        >
-          <Settings size={16} strokeWidth={1.75} />
-        </Link>
-        <div className="text-k-fg-dim hover:text-k-fg-muted flex size-4 items-center justify-center">
-          <ProfileOptions iconOnly dense />
-        </div>
-        <span className="font-k-mono text-k-version ml-auto text-[9.5px]">
-          {serverVersion ?? "dev"}
-        </span>
-      </div>
-
+      {/* Sibling of both panels, not inside either — a "New list" dialog
+          opened from the expanded panel must stay open and functional if
+          the sidebar is collapsed while it is open. */}
       <EditListModal open={newListOpen} setOpen={setNewListOpen} />
     </aside>
   );

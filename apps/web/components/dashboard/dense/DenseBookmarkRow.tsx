@@ -14,9 +14,11 @@ import { summaryPreview } from "@/lib/dense/summary";
 import { useLiveBookmark } from "@/lib/dense/useLiveBookmark";
 import { useRowNavigate } from "@/lib/dense/useRowNavigate";
 import { cn } from "@/lib/utils";
-import { Sparkles } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Highlighter, Sparkles } from "lucide-react";
 
 import { useUpdateBookmark } from "@karakeep/shared-react/hooks/bookmarks";
+import { useTRPC } from "@karakeep/shared-react/trpc";
 import { ZBookmark } from "@karakeep/shared/types/bookmarks";
 
 import { DenseRowOverflowMenu } from "./DenseRowOverflowMenu";
@@ -30,6 +32,15 @@ export function DenseBookmarkRow({
 }) {
   const bookmark = useLiveBookmark(initialBookmark);
   const { mutate: updateBookmark, isPending } = useUpdateBookmark({});
+  const api = useTRPC();
+  // One query per visible row, same pattern HighlightsBox uses for the
+  // detail view — httpBatchLink (trpc-provider.tsx) coalesces the many rows
+  // on screen into one HTTP round-trip, so this stays cheap without a
+  // server-side numHighlights field.
+  const { data: highlightsData } = useQuery(
+    api.highlights.getForBookmark.queryOptions({ bookmarkId: bookmark.id }),
+  );
+  const highlightCount = highlightsData?.highlights.length ?? 0;
 
   const title = getDenseRowTitle(bookmark);
   const source = getDenseRowSource(bookmark);
@@ -44,8 +55,10 @@ export function DenseBookmarkRow({
     <div
       {...navigate}
       className={cn(
-        "border-k-border-soft group relative flex cursor-pointer gap-[14px] border-t px-[18px] py-[14px]",
-        selected ? "bg-k-surface-1" : "hover:bg-k-surface-1/60",
+        "border-k-border-soft group relative flex cursor-pointer gap-[14px] border-t px-[18px] py-[14px] transition-colors",
+        selected
+          ? "bg-k-surface-1 shadow-[inset_2px_0_0_0_var(--k-accent)]"
+          : "hover:bg-k-surface-1",
       )}
     >
       <div className="relative z-10 flex min-w-0 flex-1 flex-col gap-[6px]">
@@ -107,6 +120,17 @@ export function DenseBookmarkRow({
               {source && <span className="text-k-divider">·</span>}
               <span className="font-k-mono text-k-fg-dim text-[11px]">
                 {readingMinutes} min
+              </span>
+            </>
+          )}
+          {highlightCount > 0 && (
+            <>
+              {(source || (!isPendingSummary && readingMinutes)) && (
+                <span className="text-k-divider">·</span>
+              )}
+              <span className="font-k-mono text-k-fg-dim inline-flex items-center gap-[3px] text-[11px]">
+                <Highlighter size={11} strokeWidth={1.75} />
+                {highlightCount}
               </span>
             </>
           )}

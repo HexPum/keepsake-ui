@@ -100,7 +100,24 @@ export default function SidebarProfileOptions({
             aria-label={t("settings.user_settings")}
             className="flex size-full items-center justify-center text-current"
           >
-            <UserCircle className="size-full" strokeWidth={1.75} />
+            {/* Rendered smaller than the wrapper box (not `size-full`):
+                UserCircle's outer ring is a stroked circle whose painted
+                edge reaches ~91% of its 24x24 viewBox (r=10, plus half the
+                1.75 stroke width each side), a solid closed shape with more
+                visual "ink" than a thin-lined glyph. The dense sidebar's
+                anchor icons — the expanded nav row glyphs (Files/
+                Favourites/Archive/Chat, `size={15}`) — sit in the usual
+                lucide ~20/24 (~83%) safe area, giving an optical (fill-
+                adjusted) diameter of 15 * 0.83 ≈ 12.5px. A thin multi-line
+                glyph like the sidebar's Settings gear reads lighter than
+                its raw bounding box implies, so matching it to that same
+                ~12.5px anchor lands its nominal size around 18px (its
+                current wrapper size — no change needed there). Solving the
+                same anchor for UserCircle's ~91%-fill ring: 12.5 / 0.91 ≈
+                13.7px nominal, i.e. ~76% of an 18px wrapper — hence 76%
+                here rather than the initial 85% guess (fix #7), which
+                still read a shade large next to the nav icons. */}
+            <UserCircle className="size-[76%]" strokeWidth={1.75} />
           </button>
         ) : (
           <Button

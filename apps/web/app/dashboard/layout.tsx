@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import ErrorFallback from "@/components/dashboard/ErrorFallback";
+import DenseShortcutsHelp from "@/components/dashboard/dense/DenseShortcutsHelp";
 import DenseSidebar from "@/components/dashboard/dense/DenseSidebar";
 import { DenseScaleProvider } from "@/components/dashboard/dense/DenseScaleController";
 import { DenseThemeProvider } from "@/components/dashboard/dense/DenseThemeController";
@@ -93,7 +94,6 @@ export default async function Dashboard({
                 <ValidAccountCheck />
                 <div className="hidden flex-none sm:flex">
                   <DenseSidebar
-                    searchEnabled={searchEnabled}
                     initialLists={lists.data.lists}
                     initialTags={tags.error ? [] : tags.data.tags}
                     serverVersion={serverConfig.serverVersion}
@@ -105,8 +105,18 @@ export default async function Dashboard({
                   {/* pb-20: clears the fixed mobile tab bar (~64px) plus its
                       own safe-area padding, so the last row in any list
                       isn't hidden behind it. sm:pb-0 — the tab bar is
-                      sm:hidden, nothing to clear on desktop. */}
-                  <div className="min-h-30 p-4 pb-20 sm:pb-4">
+                      sm:hidden, nothing to clear on desktop.
+                      sm:flex sm:min-h-full sm:flex-col: bridges the height
+                      chain down to `children` on desktop — `<main>` above
+                      has a real, definite height (flex-1 + min-h-0), but
+                      this div previously only had `min-h-30`, so anything
+                      inside sized itself to its own content instead of
+                      filling `<main>`'s visible height. Additive/floor-only
+                      (min-height, not height), so every other page's
+                      natural content-height rendering is unaffected — only
+                      a page that opts in with its own `sm:flex-1` (like
+                      DenseChat) actually uses the extra room. */}
+                  <div className="min-h-30 p-4 pb-20 sm:flex sm:min-h-full sm:flex-col sm:pb-4">
                     <ErrorBoundary fallback={<ErrorFallback />}>
                       <Suspense fallback={<LoadingSpinner />}>
                         {children}
@@ -116,6 +126,7 @@ export default async function Dashboard({
                 </main>
               </div>
               <MobileShell searchEnabled={searchEnabled} />
+              <DenseShortcutsHelp />
             </div>
           </DenseThemeProvider>
         </DenseScaleProvider>

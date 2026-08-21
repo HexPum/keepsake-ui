@@ -58,7 +58,14 @@ export default function BookmarkPreviewPage(props: {
       <DialogContent
         // Narrower than the old preview's 90%: the read-out is a single
         // 600px column, so a full-bleed dialog would be mostly empty.
-        className="border-k-border bg-k-bg h-[86%] max-w-[700px] overflow-hidden rounded-xl p-0"
+        // `flex flex-col` overrides the base DialogContent's `grid`: with
+        // that grid display, the (single, auto-sized) row track has no
+        // definite height, so DenseBookmarkDetail's `h-full` resolves to
+        // `auto` instead of the dialog's actual box — its internal
+        // `overflow-y-auto` region then had nothing to bound itself against,
+        // so long content just got clipped at the dialog's edge instead of
+        // scrolling. A flex column gives the child a real height to fill.
+        className="border-k-border bg-k-bg flex h-[86%] max-w-[700px] flex-col overflow-hidden rounded-xl p-0"
         hideCloseBtn={true}
         onOpenAutoFocus={(e) => e.preventDefault()}
       >

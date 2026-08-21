@@ -16,6 +16,7 @@ import { FullPageSpinner } from "@/components/ui/full-page-spinner";
 import { useSession } from "@/lib/auth/client";
 import { useClientConfig } from "@/lib/clientConfig";
 import {
+  estimateDetailReadingTimeMinutes,
   getDenseRowTitle,
   shouldDefaultOpenContentDisclosure,
 } from "@/lib/dense/bookmarkDisplay";
@@ -150,6 +151,7 @@ export default function DenseBookmarkDetail({
   const showOriginalTitle = !!originalTitle && originalTitle !== title;
   const isPendingSummary = bookmark.summarizationStatus === "pending";
   const { lead, keyPoints, trail } = parseSummary(bookmark.summary);
+  const readingMinutes = estimateDetailReadingTimeMinutes(bookmark);
 
   let content;
   switch (bookmark.content.type) {
@@ -270,6 +272,7 @@ export default function DenseBookmarkDetail({
             <p className="font-k-mono text-k-fg-dim text-[11px]">
               {sourceUrl && <>{displayUrl(sourceUrl)} · </>}
               {formatSavedAgo(bookmark.createdAt)}
+              {readingMinutes && <> · {readingMinutes} min read</>}
             </p>
             <h1 className="text-k-fg text-[25px] font-semibold leading-[1.22] tracking-[-0.025em] [text-wrap:pretty]">
               {title}
@@ -391,7 +394,14 @@ export default function DenseBookmarkDetail({
               : "Saved page"}
           </button>
           {contentOpen && (
-            <div className="border-k-border-soft h-[70vh] border-t">
+            // Divide by --k-zoom, not a bare 70vh: this renders inside the
+            // dense UI's zoomed wrapper (or, in the modal, inside a dialog
+            // portal that carries its own matching zoom rule — see
+            // dense-theme.css) and `zoom` re-multiplies viewport units, the
+            // same trap dashboard/layout.tsx and the full-page preview route
+            // already document and avoid. Left as-is, this box rendered 30%
+            // taller than intended at a 1.3x display scale.
+            <div className="border-k-border-soft h-[calc(70vh/var(--k-zoom,1))] border-t">
               {content}
             </div>
           )}

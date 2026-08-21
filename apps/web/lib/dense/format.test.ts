@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  estimateReadingTimeFromWordCount,
   estimateReadingTimeMinutes,
   formatCompactRelativeTime,
   formatRelativeSince,
@@ -96,5 +97,21 @@ describe("estimateReadingTimeMinutes", () => {
 
   it("never reports less than a minute for a non-empty summary", () => {
     expect(estimateReadingTimeMinutes("one two three")).toBe(1);
+  });
+});
+
+describe("estimateReadingTimeFromWordCount", () => {
+  it("returns null for zero (or negative) words", () => {
+    expect(estimateReadingTimeFromWordCount(0)).toBeNull();
+    expect(estimateReadingTimeFromWordCount(-3)).toBeNull();
+  });
+
+  it("never reports less than a minute for a non-zero word count", () => {
+    expect(estimateReadingTimeFromWordCount(3)).toBe(1);
+  });
+
+  it("scales linearly with word count, unlike the summary proxy's 6x", () => {
+    // 200 wpm, no multiplier — 1000 words is exactly 5 minutes.
+    expect(estimateReadingTimeFromWordCount(1000)).toBe(5);
   });
 });

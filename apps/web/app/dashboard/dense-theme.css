@@ -54,6 +54,18 @@
   --k-version-rail: #4a4844;
   --k-divider: #3a3b3e;
 
+  /* Sidebar collapse/expand motion (see the `.k-sidebar*` rules below).
+     A dedicated, stronger ease-out than the hover rule's plain `ease`:
+     CSS's built-in `ease-out` reads as too weak over ~95px of travel, and
+     a curve that starts slow is the wrong shape for UI motion — it delays
+     the exact moment the user is watching for. `--k-sidebar-duration`
+     sits inside the 150-250ms band for dropdown/select-scale UI — longer
+     than the 150ms hover transition below because a width change over
+     ~95px is a bigger move than a colour step, but short enough to stay
+     in the same motion vocabulary as that hover rule. */
+  --k-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --k-sidebar-duration: 180ms;
+
   background-color: var(--k-bg);
   color: var(--k-fg);
   font-family: var(--font-k-sans), "IBM Plex Sans", sans-serif;
@@ -167,6 +179,21 @@ body > [role="dialog"] {
 }
 
 /*
+ * `.k-search-input` (the inline Files/Highlights/Tags search boxes) opts
+ * out of the ring above: those inputs sit inside a small pill that already
+ * shows focus via its own `focus-within:border-k-accent` outer border plus
+ * an accent-tinted search icon, so the fork-wide ring landed as a second,
+ * inner highlight crowded into the same tight space — read as a stray
+ * text-selection-style fill rather than a focus indicator. Scoped to this
+ * one class (not `input:focus-visible` generally) so every other input in
+ * the fork — rename fields, the editor textarea, form fields — keeps the
+ * visible ring the design explicitly calls for.
+ */
+.k-dense .k-search-input:focus-visible {
+  outline: none;
+}
+
+/*
  * Every hover/active-state colour change in the fork (row backgrounds, nav
  * rows, icon buttons, tag chips, theme swatches, ...) is a bare Tailwind
  * `hover:`/`aria-pressed:` class with no transition, so it snaps instead of
@@ -208,6 +235,64 @@ body > [role="dialog"] ::selection {
 }
 
 /*
+ * Sidebar collapse/expand. `DenseSidebar.tsx` renders one `<aside>` whose
+ * width alone switches between 153px and 58px; two absolutely-positioned
+ * panels inside it (the expanded tree and the icon rail) crossfade via
+ * opacity rather than ever mounting/unmounting, so there is no layout
+ * flash and a rapid re-toggle just retargets the same transition instead
+ * of racing a mount.
+ */
+.k-dense .k-sidebar {
+  /* Property named explicitly, never `transition: all` — nothing else
+     about this element should ever animate implicitly. */
+  transition: width var(--k-sidebar-duration) var(--k-ease-out);
+}
+
+/* Leaving case: every panel defaults to invisible, and fades out fast
+   (90ms) so the outgoing panel is fully gone well before the 180ms width
+   transition finishes. */
+.k-dense .k-sidebar-panel {
+  opacity: 0;
+  transition: opacity 90ms var(--k-ease-out);
+}
+
+/* Arriving case: the incoming panel starts fading in only after a 60ms
+   delay and takes 120ms, landing right as the width transition (180ms)
+   does. The asymmetry — 90ms out, 60ms-delayed 120ms in — is deliberate:
+   it keeps the two panels from ever being simultaneously legible, which a
+   single symmetric fade could not guarantee. */
+.k-dense .k-sidebar-panel[data-active="true"] {
+  opacity: 1;
+  transition: opacity 120ms var(--k-ease-out) 60ms;
+}
+
+/* Suppresses all motion until `useSidebarCollapsed` has hydrated from
+   localStorage and applied the stored value — otherwise a user whose
+   sidebar is stored collapsed would see it animate 153px -> 58px on every
+   page load. */
+.k-dense .k-sidebar[data-ready="false"],
+.k-dense .k-sidebar[data-ready="false"] .k-sidebar-panel {
+  transition: none;
+}
+
+/* Reduced motion means fewer and gentler, not zero: the width change is
+   the actual *movement* and is the part that goes, dropped to instant;
+   opacity and colour changes aid comprehension of what just happened
+   (which panel is now showing) and stay, collapsed to one short, linear
+   crossfade instead of the asymmetric timing above. */
+@media (prefers-reduced-motion: reduce) {
+  .k-dense .k-sidebar {
+    transition-duration: 0ms;
+  }
+
+  .k-dense .k-sidebar-panel,
+  .k-dense .k-sidebar-panel[data-active="true"] {
+    transition: opacity 100ms linear;
+    transition-delay: 0ms;
+  }
+}
+
+/*
  * Referenced by inline `animation` styles in the mobile screens
  * (MobileSearchHome's "SUMMARISING" indicator, MobileBrowse's staggered
  * row entrance) — undefined keyframe names no-op silently rather than
@@ -232,4 +317,30 @@ body > [role="dialog"] ::selection {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/*
+ * Chat empty-state hero glyph (DenseChat.tsx's HexOsHero,
+ * public/brand/hex-glyph.png — the same asset DenseSidebar's HexGlyph
+ * uses). The source PNG is a baked-white raster, which would look wrong
+ * against any non-default surface tone; masked instead of drawn as an
+ * <img>, so the shape comes from the PNG's alpha channel but the fill is
+ * `--k-fg` — the mark recolours with the rest of the UI instead of being a
+ * fixed white bitmap. Cropped the same way DenseSidebar's HexGlyph is
+ * (mask-size auto 100% + mask-position left, on a box narrower than the
+ * source's full width): the canvas has empty space to the right of the
+ * mark, built for pairing with a wordmark at a fixed offset in the source
+ * mockup, not meant to show here.
+ */
+.hex-os-mark {
+  display: inline-block;
+  background-color: var(--k-fg);
+  -webkit-mask-image: url("/brand/hex-glyph.png");
+  mask-image: url("/brand/hex-glyph.png");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: left center;
+  mask-position: left center;
+  -webkit-mask-size: auto 100%;
+  mask-size: auto 100%;
 }
