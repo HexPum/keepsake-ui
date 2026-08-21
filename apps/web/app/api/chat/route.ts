@@ -146,18 +146,75 @@ const CHAT_SEARCH_STOPWORDS = new Set([
 
 /**
  * Reduces a natural-language chat message to its content keywords, for use
- * as a search-index query (see CHAT_SEARCH_STOPWORDS above for why). Falls
+ * as search-index queries (see CHAT_SEARCH_STOPWORDS above for why). Falls
  * back to the original message if stripping stopwords leaves nothing.
+ *
+ * Contractions (e.g. "I've", "what's") are collapsed *before* punctuation is
+ * stripped to plain spaces, so "I've" reduces to the stopword "i" instead of
+ * splitting into "i" + the stray, non-stopword fragment "ve" — a fragment
+ * like that used to survive filtering and get joined back into the query,
+ * where it could never match a real document.
  */
-function extractSearchKeywords(message: string): string {
+function extractSearchKeywords(message: string): string[] {
   const words = message
+    .replace(/'(ve|re|ll|d|m|s)\b/gi, "")
     .replace(/[?!.,;:'"()]/g, " ")
     .split(/\s+/)
     .filter(Boolean);
   const keywords = words.filter(
     (word) => !CHAT_SEARCH_STOPWORDS.has(word.toLowerCase()),
   );
-  return keywords.length > 0 ? keywords.join(" ") : message;
+  return keywords.length > 0 ? keywords : [message];
+}
+
+/**
+ * Retrieves bookmarks relevant to the chat message.
+ *
+ * The underlying full-text index (Meilisearch) is configured with
+ * `matchingStrategy: "all"` — every term in the query string must be present
+ * in a hit. That's the right choice for the search bar's short keyword
+ * queries, but even after stopword-stripping, a topic like "cybersecurity"
+ * is mostly a *tag*, not title/summary text, and joining multiple extracted
+ * keywords into one query still demands all of them match a single
+ * document. Rather than keep tuning keyword extraction to chase that
+ * (fragile against phrasing and emoji-heavy titles), query each keyword
+ * separately — giving "any keyword matches" behavior — and merge/dedupe the
+ * results. The full joined phrase is tried first since a precise multi-word
+ * match, when it happens, ranks better.
+ */
+async function retrieveBookmarks(
+  caller: ReturnType<typeof createTrcpClientFromCtx>,
+  message: string,
+  searchMode: "fts" | "hybrid",
+  limit: number,
+): Promise<ZBookmark[]> {
+  const keywords = extractSearchKeywords(message);
+  const queries = [keywords.join(" "), ...keywords].filter(
+    (q, i, arr) => q.length > 0 && arr.indexOf(q) === i,
+  );
+
+  const results = new Map<string, ZBookmark>();
+  for (const query of queries) {
+    if (results.size >= limit) {
+      break;
+    }
+    try {
+      const { bookmarks } = await caller.bookmarks.searchBookmarks({
+        text: query,
+        searchMode,
+        limit,
+      });
+      for (const bookmark of bookmarks) {
+        if (!results.has(bookmark.id)) {
+          results.set(bookmark.id, bookmark);
+        }
+      }
+    } catch {
+      // Retrieval is best-effort per query: one bad/empty query shouldn't
+      // stop the others from contributing results.
+    }
+  }
+  return Array.from(results.values()).slice(0, limit);
 }
 
 /** Assembles retrieved bookmarks into plain-text context for the prompt. */
@@ -212,11 +269,7 @@ export async function POST(request: NextRequest) {
 
   let retrievedContext = "";
   try {
-    const { bookmarks } = await caller.bookmarks.searchBookmarks({
-      text: extractSearchKeywords(message),
-      searchMode,
-      limit: 8,
-    });
+    const bookmarks = await retrieveBookmarks(caller, message, searchMode, 8);
     retrievedContext = buildRetrievedContext(bookmarks);
   } catch {
     // Retrieval is best-effort: fall back to answering with no bookmark
