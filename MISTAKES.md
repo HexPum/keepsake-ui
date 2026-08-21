@@ -1,0 +1,69 @@
+# Mistakes
+
+A log of things that broke, or that the user had to correct, while working on
+this repo. Newest first. Each entry: what happened, root cause, consequence,
+and the rule that prevents a repeat.
+
+When the same failure shows up 4-5 times, stop logging it here and promote it
+to a hard rule in `AGENTS.md` instead — this file is where evidence
+accumulates, `AGENTS.md` is where it gets enforced.
+
+<!--
+Entry template:
+
+## YYYY-MM-DD — short title
+
+**What happened:** ...
+**Root cause:** ...
+**Consequence:** ...
+**Prevention:** ...
+-->
+
+## 2026-08-21 — Hover states present in code but imperceptible (invisible on the near-black bg)
+
+**What happened:** After the hover sweep (fix #3), the user still saw "no hover" on sidebar nav rows and bookmark list rows. The hover classes WERE there — but used a dark token at reduced opacity (`hover:bg-k-surface-1/60`, `hover:bg-k-border-soft/60`) whose per-channel delta from the base bg was only +4/+5/+6, effectively invisible.
+**Root cause:** Chose a hover bg by picking a plausible token + `/60` opacity without checking the actual resulting contrast against the near-black base. "Has a hover class" was treated as "has a visible hover".
+**Consequence:** A second contrast-only fix (#4) raising the hovers to full-opacity base tokens (delta ~+7/+9/+11) and adding a 2px accent bar so selected stays distinct.
+**Prevention:** For any subtle surface/hover color, compute the actual per-channel delta vs the background it sits on — a dark token at <100% opacity over near-black is usually imperceptible. State the color math in the report when a browser isn't available to eyeball it. Repeat of the "looks done in code, isn't done on screen" failure mode — see the hover-scoping entry below and the stale-cache entry.
+
+## 2026-08-21 — Hover sweep scoped too narrowly + "done" by eyeballing
+
+**What happened:** Track B's "hover on everything" item was scoped to just the sidebar and marked done after a visual read; the user then found gaps (search field, FILES grid tiles, view-toggle) and inconsistent/weak hovers (icon-only controls had only a faint color shift vs. neighbours' bg-tint).
+**Root cause:** A broad "everywhere" instruction was narrowed to one area, and coverage was judged by eyeballing rather than enumerating every interactive element. Weak-but-present hover wasn't recognized as a gap.
+**Consequence:** A second full sweep (fix #3) across sidebar + search + list rows + grid tiles.
+**Prevention:** For any "apply X everywhere" task, mechanically enumerate every interactive element (grep every `<Link>`/`<button>`) and check both presence AND consistency of the affordance strength — don't eyeball, and treat weak/inconsistent as a gap.
+
+## 2026-08-21 — Nobody was writing to this file
+
+**What happened:** Several correctable mistakes happened across Phase 2 (below), but MISTAKES.md stayed an empty template until the user asked why.
+**Root cause:** Corrections were captured only in the hive's own state (god memory + task `result` fields); no step mirrored them into the repo's MISTAKES.md. The logging habit was never wired into the workflow.
+**Consequence:** The repo's own evidence log was useless; lessons lived only in a place the user doesn't read.
+**Prevention:** After every user correction or broken build, add an entry here in the same turn it's resolved — treat it as part of "done", not optional. God pfleg­t es bei der Integration mit.
+
+## 2026-08-21 — Stale .next cache hid every UI change ("I see no changes")
+
+**What happened:** After Tracks B + A + two review fixes, the user reported seeing no changes at all in localhost.
+**Root cause:** The running `next dev` reused a persistent Turbopack `.next` cache (build stamped 15:41) and never recompiled the dashboard route, even though the source edits (17:54) and the server start (17:57) were both newer. Code was 100% correct on-disk on the right branch.
+**Consequence:** A full diagnostic round (branch/worktree/served-CSS checks) to prove the code was present and locate the real cause.
+**Prevention:** After a batch of UI changes, restart the dev server with a clean cache: `rm -rf apps/web/.next && pnpm --filter @karakeep/web run dev`, then hard-reload (Cmd+Shift+R). Don't trust HMR to pick up new `public/` assets or large CSS/layout changes.
+
+## 2026-08-21 — HEX-OS chat hero over-built (CRT frame + animations) when a simple static version was wanted
+
+**What happened:** The first HEX-OS empty-state used the CRT-monitor jpg + CSS scanlines + a flicker animation. The user wanted a simple, static, tokenized glyph + wordmark with no animation.
+**Root cause:** Treated the CRT reference art as the literal build target instead of as mood/direction, and gold-plated the effects on a first pass.
+**Consequence:** A full rebuild of the hero (fix #2), plus deleting the CRT asset and the scanline/flicker CSS.
+**Prevention:** For aesthetic/hero elements, ship the simplest static version first and let the user ask for effects. Reference images are mood, not a spec — confirm fidelity level before adding motion.
+
+## 2026-08-21 — Chat input bar: shrank its height instead of anchoring it to the bottom
+
+**What happened:** The dispatch read the "bottom bar should take much less space" annotation as "make the bar shorter", so the input padding/heights were reduced. The actual intent was to move the input bar + divider down to the bottom edge (standard chatbot layout) so the hero fills the freed middle.
+**Root cause:** Ambiguous layout annotation interpreted as size, not position. The real problem was dead space below the bar (the chat container sized to content, not viewport), not the bar's height.
+**Consequence:** The shrink was reverted and redone as a bottom-anchored flex footer (fix #1) — one wasted build + one correction round.
+**Prevention:** When an annotation is about space/room, distinguish size vs. position vs. container-fill before dispatching. For "fills the middle / bar at the bottom", suspect a flex height-chain gap, not element sizing.
+
+## 2026-08-21 — First tags-ui commit rejected by the pre-commit hook (oxfmt not run)
+
+**What happened:** `git commit` of the tags-ui slice failed; the husky pre-commit hook's full-tree `format` step flagged 2 new component files.
+**Root cause:** Worker-authored new files weren't oxfmt-clean, and oxfmt wasn't run before committing.
+**Consequence:** Failed commit, then re-run of `oxfmt` + re-stage + re-commit.
+**Prevention:** Always run `cd apps/web && pnpm exec oxfmt --ignore-path=../../.gitignore .` before committing. This is now baked into every worker dispatch contract; keep it there.

@@ -151,7 +151,7 @@ Only the sidebar toggle is wired in the prototype. All of these need building.
 
 | Trigger | Behaviour |
 | --- | --- |
-| Sidebar collapse / expand icon | Toggles between the 153px sidebar and the 58px rail. **Persist** the choice (localStorage or user prefs) so it survives reload. |
+| Sidebar collapse / expand icon | Toggles between the 153px sidebar and the 58px rail. **Persist** the choice (localStorage or user prefs) so it survives reload. Persisted in `localStorage` under `k-dense-sidebar-collapsed`; the stored state is applied without animating on first paint. |
 | Row click | Opens the item detail. Prototype 1c shows the intended detail read-out: original URL + saved date, large AI title (25px/600/-0.025em), the original page title shown small for reference, a `SUMMARY` block at 14px/1.65, a `KEY POINTS` list with `—` marks in `--accent`, and the tag row with a dashed `+ tag` affordance. |
 | Star glyph | Toggles favourite; optimistic update, revert on failure. |
 | Overflow glyph | Menu: open original, archive, edit tags, delete, re-summarise. |
@@ -264,13 +264,17 @@ these are the concrete numbers that implements it, plus what's still open.
   in `.k-dense` (`dense-theme.css`), including portaled dropdowns and dialogs, rather than
   per-component — covers row hover, nav rows, icon buttons, tag chips, and theme swatches
   without needing `transition-colors` remembered on each one added later.
-- **Sidebar collapse/expand (not animated — a real gap, not a choice).** The 153px
-  expanded and 58px rail states render as two structurally different `<aside>` trees
-  (`DenseSidebar.tsx`), not one element whose width changes — full nav with section
-  labels vs. an icon-only column. A CSS width transition can't bridge that; animating this
-  would mean restructuring to a single container with cross-fading content, which is a
-  real follow-up task, not a token change. Until then it's a hard cut, by necessity rather
-  than intent.
+- **Sidebar collapse/expand (implemented).** One `<aside>` (`DenseSidebar.tsx`) holds two
+  always-mounted, absolutely-positioned panels — the 153px expanded tree and the 58px
+  icon rail — and only the container's own `width` animates, `153px ↔ 58px` over `180ms`
+  with `cubic-bezier(0.23, 1, 0.32, 1)`. The panels themselves crossfade on top of that:
+  the outgoing one fades out over 90ms, the incoming one fades in over 120ms starting
+  60ms in, so the two are never both legible at once and the fade lands right as the
+  width transition finishes. It's a CSS *transition*, not keyframes, specifically so a
+  rapid re-toggle retargets from the sidebar's current width instead of restarting from
+  the other end. No `transform` and no shadow are involved, consistent with the
+  zero-elevation rule above. With reduced motion requested, the width transition drops to
+  instant (0ms) and the opacity crossfade collapses to a single 100ms linear fade.
 - **Row → detail view (unspecified).** The prototype doesn't wire this transition at all;
   no target has been decided yet.
 
