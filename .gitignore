@@ -77,6 +77,8 @@ auth_failures.log
 .aicontext/
 .codex
 .claude/worktrees
+# Runtime working output of the .claude pipeline/bug-loop agents (findings, logs, offsets)
+.claude/pipeline/
 jean.json
 
 # `next dev` regenerates these inside the Next app on every run (see
