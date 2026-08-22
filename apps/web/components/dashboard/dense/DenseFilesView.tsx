@@ -46,6 +46,21 @@ import { QuickAddDialog } from "./QuickAddDialog";
 const VIEW_KEY = "k-dense-files-view";
 
 /**
+ * `formatRelativeSince` is computed off `Date.now()`, so its output can tick
+ * over to a different minute between SSR and hydration, producing a
+ * server/client text mismatch. Defer rendering it until after mount (SSR and
+ * the first client render both render nothing here, then the client fills in
+ * the real string) — the standard fix for this class of hydration mismatch.
+ */
+function useMounted() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  return mounted;
+}
+
+/**
  * Shared shell for every control in the FILES header. The prototype drew
  * these at differing heights (22px buttons next to a taller search pill);
  * unifying them on the pill's height reads considerably tidier, so this is
@@ -234,6 +249,7 @@ export default function DenseFilesView({
     if (!acc || candidate > acc) return candidate;
     return acc;
   }, null);
+  const mounted = useMounted();
 
   return (
     // Read by useBookmarkPostCreationHook, inside the QuickAddDialog below:
@@ -268,7 +284,7 @@ export default function DenseFilesView({
                   <>
                     {bookmarks.length} item{bookmarks.length === 1 ? "" : "s"} ·{" "}
                     {unsummarisedCount} unsummarised
-                    {mostRecentModified && (
+                    {mounted && mostRecentModified && (
                       <> · updated {formatRelativeSince(mostRecentModified)}</>
                     )}
                   </>
