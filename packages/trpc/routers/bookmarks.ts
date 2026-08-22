@@ -61,7 +61,10 @@ import {
 } from "@karakeep/shared/types/bookmarks";
 import type { ZBookmarkTags } from "@karakeep/shared/types/tags";
 import { ANCHOR_TEXT_MAX_LENGTH } from "@karakeep/shared/utils/reading-progress-dom";
-import { normalizeTagName } from "@karakeep/shared/utils/tag";
+import {
+  normalizeTagName,
+  tagCaseInsensitiveKey,
+} from "@karakeep/shared/utils/tag";
 import { getVectorStoreClient } from "@karakeep/shared/vectorStore";
 import type { VectorFilterQuery } from "@karakeep/shared/vectorStore";
 import { bookmarkCreationCounter } from "../stats";
@@ -1254,6 +1257,14 @@ export const bookmarksAppRouter = router({
         const tagNames = tagIdentifiers.flatMap((t) =>
           t.tagName ? [t.tagName] : [],
         );
+        // Match tag names case-insensitively (e.g. "OSINT" == "osint") so
+        // we attach to an existing tag instead of missing it and forking
+        // a case-variant duplicate. Fetched in JS (not via SQL inArray)
+        // since we intentionally don't want the separator-collapsing
+        // behavior of the generated `normalizedName` column here.
+        const wantedKeys = new Set(
+          tagNames.map((n) => tagCaseInsensitiveKey(n)),
+        );
 
         // Fetch tag IDs in parallel
         const [byIds, byNames] = await Promise.all([
@@ -1268,14 +1279,14 @@ export const bookmarksAppRouter = router({
                   ),
                 )
             : Promise.resolve([]),
-          tagNames.length > 0
+          wantedKeys.size > 0
             ? ctx.db
                 .select({ id: bookmarkTags.id, name: bookmarkTags.name })
                 .from(bookmarkTags)
-                .where(
-                  and(
-                    eq(bookmarkTags.userId, ctx.user.id),
-                    inArray(bookmarkTags.name, tagNames),
+                .where(eq(bookmarkTags.userId, ctx.user.id))
+                .then((rows) =>
+                  rows.filter((r) =>
+                    wantedKeys.has(tagCaseInsensitiveKey(r.name)),
                   ),
                 )
             : Promise.resolve([]),
@@ -1303,18 +1314,43 @@ export const bookmarksAppRouter = router({
       }));
 
       {
-        // Create new tags
+        // Create new tags, skipping any that already exist under a
+        // case/separator-insensitive match (e.g. don't create "osint" if
+        // "OSINT" already exists) so we don't fork bookmark counts across
+        // near-duplicate tags.
         const toAddTagNames = normalizedAttachTags
           .flatMap((i) => (i.tagName ? [i.tagName] : []))
           .filter((n) => n.length > 0); // drop empty results
 
         if (toAddTagNames.length > 0) {
-          await ctx.db
-            .insert(bookmarkTags)
-            .values(
-              toAddTagNames.map((name) => ({ name, userId: ctx.user.id })),
-            )
-            .onConflictDoNothing();
+          const byKey = new Map<string, string>();
+          for (const name of toAddTagNames) {
+            const key = tagCaseInsensitiveKey(name);
+            if (!byKey.has(key)) {
+              byKey.set(key, name);
+            }
+          }
+
+          const existingTags = await ctx.db
+            .select({ name: bookmarkTags.name })
+            .from(bookmarkTags)
+            .where(eq(bookmarkTags.userId, ctx.user.id));
+          const existingKeys = new Set(
+            existingTags.map((t) => tagCaseInsensitiveKey(t.name)),
+          );
+
+          const namesToInsert = [...byKey.entries()]
+            .filter(([key]) => !existingKeys.has(key))
+            .map(([, name]) => name);
+
+          if (namesToInsert.length > 0) {
+            await ctx.db
+              .insert(bookmarkTags)
+              .values(
+                namesToInsert.map((name) => ({ name, userId: ctx.user.id })),
+              )
+              .onConflictDoNothing();
+          }
         }
       }
 
@@ -1332,7 +1368,9 @@ export const bookmarksAppRouter = router({
         const inputTag = normalizedAttachTags.find(
           (t) =>
             (t.tagId && t.tagId === fetchedTag.id) ||
-            (t.tagName && t.tagName === fetchedTag.name),
+            (t.tagName &&
+              tagCaseInsensitiveKey(t.tagName) ===
+                tagCaseInsensitiveKey(fetchedTag.name)),
         );
 
         if (inputTag) {

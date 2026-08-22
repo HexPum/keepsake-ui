@@ -7,6 +7,20 @@ export function normalizeTagName(raw: string): string {
   return raw.trim().replace(/^#+/, ""); // strip every leading #
 }
 
+/**
+ * Case-insensitive key used to detect tags that differ only in casing
+ * (e.g. "OSINT" vs "osint"), so a lookup-or-create attaches to the
+ * existing tag instead of forking a case-variant duplicate. Deliberately
+ * narrower than the `normalizedName` column on `bookmarkTags`
+ * (packages/db/schema.ts), which also collapses separators (" ", "-",
+ * "_") for AI-tag reuse — that's a looser match than we want for
+ * human-entered tag names, where e.g. "javascript" and "java-script"
+ * should stay distinct.
+ */
+export function tagCaseInsensitiveKey(raw: string): string {
+  return raw.toLowerCase();
+}
+
 export type TagStyle = ZTagStyle;
 
 export function getTagStylePrompt(style: TagStyle): string {
