@@ -1,4 +1,8 @@
 import { NextRequest } from "next/server";
+import {
+  extractSearchKeywords,
+  prioritizeByTagMatch,
+} from "@/lib/chat/retrieval";
 import { getDenseRowTitle } from "@/lib/dense/bookmarkDisplay";
 import {
   createContextFromRequest,
@@ -21,151 +25,6 @@ export const dynamic = "force-dynamic";
 const zChatRequestSchema = z.object({
   message: z.string().min(1).max(4000),
 });
-
-// The full-text search index (Meilisearch, via bookmarks.searchBookmarks) is
-// configured with matchingStrategy "all": every query term must be present
-// in a hit. That's fine for the search bar's short, keyword-style queries,
-// but a natural-language chat question like "What have I saved about Claude
-// Code?" is mostly stopwords, and requiring "what"/"have"/"i"/"saved"/"about"
-// to all match a bookmark's title/summary/tags means it never does — the
-// query matches zero documents even when "Claude Code" is a real tag on
-// several bookmarks. Strip common English stopwords/question words before
-// using the message as a search query, so retrieval sees the actual topic
-// keywords instead of the whole sentence.
-const CHAT_SEARCH_STOPWORDS = new Set([
-  "a",
-  "an",
-  "the",
-  "is",
-  "are",
-  "was",
-  "were",
-  "am",
-  "be",
-  "been",
-  "being",
-  "i",
-  "you",
-  "he",
-  "she",
-  "it",
-  "we",
-  "they",
-  "me",
-  "him",
-  "her",
-  "us",
-  "them",
-  "my",
-  "your",
-  "his",
-  "its",
-  "our",
-  "their",
-  "what",
-  "which",
-  "who",
-  "whom",
-  "this",
-  "that",
-  "these",
-  "those",
-  "have",
-  "has",
-  "had",
-  "do",
-  "does",
-  "did",
-  "will",
-  "would",
-  "shall",
-  "should",
-  "can",
-  "could",
-  "may",
-  "might",
-  "must",
-  "about",
-  "above",
-  "across",
-  "after",
-  "against",
-  "along",
-  "among",
-  "around",
-  "at",
-  "before",
-  "behind",
-  "below",
-  "beside",
-  "between",
-  "by",
-  "down",
-  "during",
-  "for",
-  "from",
-  "in",
-  "into",
-  "near",
-  "of",
-  "off",
-  "on",
-  "onto",
-  "out",
-  "over",
-  "through",
-  "to",
-  "toward",
-  "under",
-  "until",
-  "up",
-  "with",
-  "within",
-  "without",
-  "and",
-  "or",
-  "but",
-  "if",
-  "because",
-  "as",
-  "while",
-  "saved",
-  "save",
-  "saving",
-  "bookmark",
-  "bookmarked",
-  "bookmarks",
-  "find",
-  "found",
-  "tell",
-  "show",
-  "know",
-  "recall",
-  "remember",
-]);
-
-/**
- * Reduces a natural-language chat message to its content keywords, for use
- * as search-index queries (see CHAT_SEARCH_STOPWORDS above for why). Falls
- * back to the original message if stripping stopwords leaves nothing.
- *
- * Contractions (e.g. "I've", "what's") are collapsed *before* punctuation is
- * stripped to plain spaces, so "I've" reduces to the stopword "i" instead of
- * splitting into "i" + the stray, non-stopword fragment "ve" — a fragment
- * like that used to survive filtering and get joined back into the query,
- * where it could never match a real document.
- */
-function extractSearchKeywords(message: string): string[] {
-  const words = message
-    .replace(/'(ve|re|ll|d|m|s)\b/gi, "")
-    .replace(/[?!.,;:'"()]/g, " ")
-    .split(/\s+/)
-    .filter(Boolean);
-  const keywords = words.filter(
-    (word) => !CHAT_SEARCH_STOPWORDS.has(word.toLowerCase()),
-  );
-  return keywords.length > 0 ? keywords : [message];
-}
 
 /**
  * Retrieves bookmarks relevant to the chat message.
@@ -197,6 +56,21 @@ function extractSearchKeywords(message: string): string[] {
  * the others. The exact joined phrase is exempt from the cap:
  * `matchingStrategy: "all"` requires every term to match one document, so
  * a phrase hit is inherently precise, not a source of noise.
+ *
+ * Third-round-trip lesson, same repro phrase ("camping and outdoors"): the
+ * per-keyword cap above stops a *broad* keyword from flooding the shared
+ * budget, but it didn't stop a keyword's *own* budget from being spent on
+ * the wrong bookmarks. "outdoors" is a real tag on one bookmark, but also
+ * loosely matches a few other bookmarks' title/summary text — and when
+ * those loose text matches happened to rank ahead of the true tag match in
+ * Meilisearch's relevance order, they filled the keyword's small
+ * `perKeywordCap` before the actually-relevant, tag-matched bookmark was
+ * ever considered, even though it was sitting right there in the same
+ * result page (proven by the fact that querying "outdoors" alone, with its
+ * cap effectively unbounded, DID surface it). Fix: within each keyword's
+ * own results, sort genuine tag matches (`prioritizeByTagMatch`) ahead of
+ * loose text matches before applying the cap, so a keyword's limited budget
+ * always gets spent on its real tag match first.
  */
 async function retrieveBookmarks(
   caller: ReturnType<typeof createTrcpClientFromCtx>,
@@ -220,8 +94,12 @@ async function retrieveBookmarks(
         searchMode,
         limit,
       });
+      // Only reorder per-keyword queries — the joined phrase is uncapped
+      // (see above), so there's no budget for a loose match to steal.
+      const candidates =
+        query === phrase ? bookmarks : prioritizeByTagMatch(bookmarks, query);
       let added = 0;
-      for (const bookmark of bookmarks) {
+      for (const bookmark of candidates) {
         if (added >= cap) {
           break;
         }
