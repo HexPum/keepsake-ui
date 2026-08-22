@@ -181,6 +181,22 @@ function extractSearchKeywords(message: string): string[] {
  * separately — giving "any keyword matches" behavior — and merge/dedupe the
  * results. The full joined phrase is tried first since a precise multi-word
  * match, when it happens, ranks better.
+ *
+ * Two-round-trip lesson from "camping and outdoors": the phrase-then-
+ * keyword-fallback approach above still failed even though every extracted
+ * keyword, queried in isolation, returned the right bookmarks. The cause
+ * wasn't keyword extraction dropping "camping"/"outdoors" - it was that a
+ * single broad, non-stopword filler keyword (e.g. "related") loosely
+ * matched many unrelated bookmarks via title/summary text, filled the
+ * *entire* shared result budget by itself via the old `results.size >=
+ * limit` early exit, and starved out the later, more specific keyword
+ * queries before they ever ran. Fix: every extracted keyword always gets
+ * its turn (no early exit on cumulative size), and each individual keyword
+ * query's contribution to the merged set is capped to a fraction of the
+ * overall limit, so no single keyword - however generic - can crowd out
+ * the others. The exact joined phrase is exempt from the cap:
+ * `matchingStrategy: "all"` requires every term to match one document, so
+ * a phrase hit is inherently precise, not a source of noise.
  */
 async function retrieveBookmarks(
   caller: ReturnType<typeof createTrcpClientFromCtx>,
@@ -189,24 +205,29 @@ async function retrieveBookmarks(
   limit: number,
 ): Promise<ZBookmark[]> {
   const keywords = extractSearchKeywords(message);
-  const queries = [keywords.join(" "), ...keywords].filter(
+  const phrase = keywords.join(" ");
+  const perKeywordCap = Math.max(2, Math.ceil(limit / keywords.length));
+  const queries = [phrase, ...keywords].filter(
     (q, i, arr) => q.length > 0 && arr.indexOf(q) === i,
   );
 
   const results = new Map<string, ZBookmark>();
   for (const query of queries) {
-    if (results.size >= limit) {
-      break;
-    }
+    const cap = query === phrase ? limit : perKeywordCap;
     try {
       const { bookmarks } = await caller.bookmarks.searchBookmarks({
         text: query,
         searchMode,
         limit,
       });
+      let added = 0;
       for (const bookmark of bookmarks) {
+        if (added >= cap) {
+          break;
+        }
         if (!results.has(bookmark.id)) {
           results.set(bookmark.id, bookmark);
+          added++;
         }
       }
     } catch {
