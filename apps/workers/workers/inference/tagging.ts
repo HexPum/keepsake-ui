@@ -34,6 +34,7 @@ import { Bookmark } from "@karakeep/trpc/models/bookmarks";
 import { WebhooksService } from "@karakeep/trpc/models/webhooks.service";
 
 import type { InferenceOutcome } from "./inferenceWorker";
+import { parseJsonFromLLMResponse } from "./llmJson";
 
 /**
  * The maximum length of the relevant tag names to avoid bloating the inference context.
@@ -43,42 +44,6 @@ const RELEVANT_TAG_TRUNCATE_LENGTH = 1000;
 const openAIResponseSchema = z.object({
   tags: z.array(z.string()),
 });
-
-function parseJsonFromLLMResponse(response: string): unknown {
-  const trimmedResponse = response.trim();
-
-  // Try parsing the response as-is first
-  try {
-    return JSON.parse(trimmedResponse);
-  } catch {
-    // If that fails, try to extract JSON from markdown code blocks
-    const jsonBlockRegex = /```(?:json)?\s*(\{[\s\S]*?\})\s*```/i;
-    const match = trimmedResponse.match(jsonBlockRegex);
-
-    if (match) {
-      try {
-        return JSON.parse(match[1]);
-      } catch {
-        // Fall through to other extraction methods
-      }
-    }
-
-    // Try to find JSON object boundaries in the text
-    const jsonObjectRegex = /\{[\s\S]*\}/;
-    const objectMatch = trimmedResponse.match(jsonObjectRegex);
-
-    if (objectMatch) {
-      try {
-        return JSON.parse(objectMatch[0]);
-      } catch {
-        // Fall through to final attempt
-      }
-    }
-
-    // Last resort: try to parse the original response again to get the original error
-    return JSON.parse(trimmedResponse);
-  }
-}
 
 function tagNormalizer() {
   // This function needs to be in sync with the generated normalizedName column in bookmarkTags
