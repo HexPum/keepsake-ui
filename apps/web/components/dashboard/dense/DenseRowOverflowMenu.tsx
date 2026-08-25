@@ -30,7 +30,18 @@ import { BookmarkTypes, ZBookmark } from "@karakeep/shared/types/bookmarks";
  * The row's overflow (⋯) menu: open original, archive, edit tags, delete,
  * re-summarise — per the design spec.
  */
-export function DenseRowOverflowMenu({ bookmark }: { bookmark: ZBookmark }) {
+export function DenseRowOverflowMenu({
+  bookmark,
+  className,
+}: {
+  bookmark: ZBookmark;
+  /** Overrides the trigger's default classes. Default is `text-current`
+   *  (inherits an ambient colour from a row's own dimming) — the detail
+   *  view has no such ambient dimming, so it passes its own ACTION_ICON
+   *  classes to match its Favourite/Archive siblings exactly instead of
+   *  rendering unintentionally brighter than them. */
+  className?: string;
+}) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
@@ -64,7 +75,10 @@ export function DenseRowOverflowMenu({ bookmark }: { bookmark: ZBookmark }) {
             type="button"
             aria-label="More actions"
             onClick={(e) => e.stopPropagation()}
-            className="hover:text-k-fg-muted flex items-center justify-center text-current"
+            className={
+              className ??
+              "hover:text-k-fg-muted flex items-center justify-center text-current"
+            }
           >
             <MoreHorizontal size={15} strokeWidth={1.75} />
           </button>

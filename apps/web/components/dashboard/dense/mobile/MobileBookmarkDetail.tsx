@@ -97,6 +97,12 @@ export function MobileBookmarkDetail({
   const [contentOpenOverride, setContentOpenOverride] = useState<
     boolean | null
   >(null);
+  // Same null-means-"apply the default" convention as contentOpenOverride
+  // above — see the matching note in desktop's DenseBookmarkDetail.
+  const [noteOpenOverride, setNoteOpenOverride] = useState<boolean | null>(
+    null,
+  );
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
   const handleBack = onBack ?? (() => router.back());
 
   const { data: bookmark } = useQuery(
@@ -200,6 +206,9 @@ export function MobileBookmarkDetail({
   const contentOpen =
     contentOpenOverride ??
     shouldDefaultOpenContentDisclosure(bookmark.content.type);
+  // Collapsed unless there's an actual note to show — see the matching note
+  // in desktop's DenseBookmarkDetail.
+  const noteOpen = noteOpenOverride ?? !!bookmark.note?.trim();
 
   const isOwner = session?.user?.id === bookmark.userId;
   const domain = sourceUrl ? getDomainFromUrl(sourceUrl) : null;
@@ -245,25 +254,7 @@ export function MobileBookmarkDetail({
           </span>
         )}
         <div className="ml-auto flex flex-none items-center gap-[15px]">
-          <button
-            type="button"
-            aria-label={bookmark.favourited ? "Unfavourite" : "Favourite"}
-            aria-pressed={bookmark.favourited}
-            disabled={!isOwner || isUpdating}
-            onClick={() =>
-              updateBookmark({
-                bookmarkId: bookmark.id,
-                favourited: !bookmark.favourited,
-              })
-            }
-            className="text-k-fg-muted disabled:opacity-50"
-          >
-            <FavouritedActionIcon
-              favourited={bookmark.favourited}
-              size={19}
-              strokeWidth={1.7}
-            />
-          </button>
+          {isOwner && <DenseRowOverflowMenu bookmark={bookmark} />}
           <button
             type="button"
             aria-label={bookmark.archived ? "Unarchive" : "Archive"}
@@ -283,7 +274,25 @@ export function MobileBookmarkDetail({
               strokeWidth={1.7}
             />
           </button>
-          {isOwner && <DenseRowOverflowMenu bookmark={bookmark} />}
+          <button
+            type="button"
+            aria-label={bookmark.favourited ? "Unfavourite" : "Favourite"}
+            aria-pressed={bookmark.favourited}
+            disabled={!isOwner || isUpdating}
+            onClick={() =>
+              updateBookmark({
+                bookmarkId: bookmark.id,
+                favourited: !bookmark.favourited,
+              })
+            }
+            className="text-k-fg-muted disabled:opacity-50"
+          >
+            <FavouritedActionIcon
+              favourited={bookmark.favourited}
+              size={19}
+              strokeWidth={1.7}
+            />
+          </button>
         </div>
       </div>
 
@@ -372,21 +381,62 @@ export function MobileBookmarkDetail({
           </p>
         )}
 
-        <div className="border-k-border mt-[18px] flex flex-col gap-[9px] border-t pt-[16px]">
-          <p className={SECTION_LABEL}>Note</p>
-          <NoteEditor
-            bookmark={bookmark}
-            disabled={!isOwner}
-            className="border-k-border bg-k-surface-2 text-k-fg-muted placeholder:text-k-fg-dim min-h-[4.5rem] rounded-[8px] text-[13px] leading-[1.5]"
-          />
-        </div>
+        {/* Note/Attachments/Highlights are utility disclosures, not
+            primary content — grouped with their own tighter rhythm
+            (gap-[10px]) instead of mt-[18px], so two collapsed one-line
+            headers don't read as far apart as full content blocks. Same
+            treatment as desktop's DenseBookmarkDetail. */}
+        <div className="border-k-border mt-[18px] flex flex-col gap-[10px] border-t pt-[16px]">
+          <div className="flex flex-col gap-[9px]">
+            <button
+              type="button"
+              aria-expanded={noteOpen}
+              onClick={() => setNoteOpenOverride(!noteOpen)}
+              className={cn(SECTION_LABEL, "flex items-center gap-[8px]")}
+            >
+              <ChevronRight
+                size={12}
+                className={cn("transition-transform", noteOpen && "rotate-90")}
+              />
+              Note
+            </button>
+            {noteOpen && (
+              <NoteEditor
+                bookmark={bookmark}
+                disabled={!isOwner}
+                className="border-k-border bg-k-surface-2 text-k-fg-muted placeholder:text-k-fg-dim min-h-[4.5rem] rounded-[8px] text-[13px] leading-[1.5]"
+              />
+            )}
+          </div>
 
-        <div className="mt-[18px] flex flex-col gap-[18px]">
-          <AttachmentBox bookmark={bookmark} readOnly={!isOwner} />
+          <div className="flex flex-col gap-[9px]">
+            <button
+              type="button"
+              aria-expanded={attachmentsOpen}
+              onClick={() => setAttachmentsOpen((open) => !open)}
+              className={cn(SECTION_LABEL, "flex items-center gap-[8px]")}
+            >
+              <ChevronRight
+                size={12}
+                className={cn(
+                  "transition-transform",
+                  attachmentsOpen && "rotate-90",
+                )}
+              />
+              Attachments
+            </button>
+            {attachmentsOpen && (
+              <AttachmentBox bookmark={bookmark} readOnly={!isOwner} headless />
+            )}
+          </div>
+
           <HighlightsBox bookmarkId={bookmark.id} readOnly={!isOwner} />
         </div>
 
-        <div className="border-k-border mt-[18px] border-t">
+        {/* mt-[10px] rather than the old 18: matches the tighter rhythm of
+            the group above instead of the section-level spacing used
+            elsewhere on this page. */}
+        <div className="border-k-border mt-[10px] border-t">
           <button
             type="button"
             aria-expanded={contentOpen}

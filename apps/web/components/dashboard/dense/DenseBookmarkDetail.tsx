@@ -6,6 +6,7 @@ import {
   ArchivedActionIcon,
   FavouritedActionIcon,
 } from "@/components/dashboard/bookmarks/icons";
+import { DenseRowOverflowMenu } from "@/components/dashboard/dense/DenseRowOverflowMenu";
 import { SummaryAspectText } from "@/components/dashboard/dense/SummaryAspectText";
 import { AssetContentSection } from "@/components/dashboard/preview/AssetContentSection";
 import AttachmentBox from "@/components/dashboard/preview/AttachmentBox";
@@ -25,13 +26,7 @@ import { formatSavedAgo } from "@/lib/dense/format";
 import { parseSummary } from "@/lib/dense/summary";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import {
-  ChevronRight,
-  ExternalLink,
-  RefreshCw,
-  Tag as TagIcon,
-  X,
-} from "lucide-react";
+import { ChevronRight, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -100,6 +95,15 @@ export default function DenseBookmarkDetail({
   const [contentOpenOverride, setContentOpenOverride] = useState<
     boolean | null
   >(null);
+  // Same null-means-"apply the default" convention as contentOpenOverride
+  // above — the default here (see noteOpen below) depends on whether the
+  // bookmark actually has a note, so it can't be a plain useState(false).
+  const [noteOpenOverride, setNoteOpenOverride] = useState<boolean | null>(
+    null,
+  );
+  // No data-dependent default to compute for attachments (unlike note/
+  // content) — always collapsed to start, per the design.
+  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
   const [tagEditorOpen, setTagEditorOpen] = useState(false);
 
   const { data: bookmark } = useQuery(
@@ -139,6 +143,9 @@ export default function DenseBookmarkDetail({
   const contentOpen =
     contentOpenOverride ??
     shouldDefaultOpenContentDisclosure(bookmark.content.type);
+  // Collapsed unless there's an actual note to show — an empty note isn't
+  // worth greeting the reader with an open, empty box.
+  const noteOpen = noteOpenOverride ?? !!bookmark.note?.trim();
 
   const isOwner = session?.user?.id === bookmark.userId;
   const sourceUrl = getSourceUrl(bookmark);
@@ -173,25 +180,15 @@ export default function DenseBookmarkDetail({
           a scrolling body, but on the full-page route `<main>` is the
           scroller, and without this the actions would scroll away. */}
       <div className="border-k-border bg-k-bg sticky top-0 z-10 flex flex-none items-center gap-[10px] border-b px-[22px] py-[13px]">
-        <button
-          type="button"
-          aria-label={bookmark.favourited ? "Unfavourite" : "Favourite"}
-          aria-pressed={bookmark.favourited}
-          disabled={!isOwner || isUpdating}
-          onClick={() =>
-            updateBookmark({
-              bookmarkId: bookmark.id,
-              favourited: !bookmark.favourited,
-            })
-          }
-          className={ACTION_ICON}
-        >
-          <FavouritedActionIcon
-            favourited={bookmark.favourited}
-            size={16}
-            strokeWidth={1.75}
-          />
-        </button>
+        {isOwner && (
+          // Open original and Edit tags used to live here as dedicated
+          // icons — both redundant now: the title above is already a link
+          // to sourceUrl (see the h1 below), and the tag chips/+tag button
+          // further down already open the inline editor. This is a bare
+          // "more" affordance for future actions, same icon as the row and
+          // mobile detail overflow menus. Leftmost of the three, per design.
+          <DenseRowOverflowMenu bookmark={bookmark} className={ACTION_ICON} />
+        )}
         <button
           type="button"
           aria-label={bookmark.archived ? "Unarchive" : "Archive"}
@@ -213,25 +210,23 @@ export default function DenseBookmarkDetail({
         </button>
         <button
           type="button"
-          aria-label="Edit tags"
-          aria-expanded={tagEditorOpen}
-          disabled={!isOwner}
-          onClick={() => setTagEditorOpen((open) => !open)}
+          aria-label={bookmark.favourited ? "Unfavourite" : "Favourite"}
+          aria-pressed={bookmark.favourited}
+          disabled={!isOwner || isUpdating}
+          onClick={() =>
+            updateBookmark({
+              bookmarkId: bookmark.id,
+              favourited: !bookmark.favourited,
+            })
+          }
           className={ACTION_ICON}
         >
-          <TagIcon size={16} strokeWidth={1.75} />
+          <FavouritedActionIcon
+            favourited={bookmark.favourited}
+            size={16}
+            strokeWidth={1.75}
+          />
         </button>
-        {sourceUrl && (
-          <a
-            href={sourceUrl}
-            target="_blank"
-            rel="noreferrer"
-            aria-label="Open original"
-            className={ACTION_ICON}
-          >
-            <ExternalLink size={16} strokeWidth={1.75} />
-          </a>
-        )}
 
         <button
           type="button"
@@ -268,7 +263,12 @@ export default function DenseBookmarkDetail({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="flex max-w-[600px] flex-col gap-[22px] px-[34px] pb-[30px] pt-[26px]">
+        {/* pb-[18px] rather than the old 30: with Note/Attachments now
+            collapsed by default (a slim header row, not a filled box), the
+            old bottom padding left a visibly larger gap before the "Saved
+            page" divider below than the section's own internal rhythm
+            (gap-[22px]/[10px]) implies. */}
+        <div className="flex max-w-[600px] flex-col gap-[22px] px-[34px] pb-[18px] pt-[26px]">
           <div className="flex flex-col gap-[10px]">
             <p className="font-k-mono text-k-fg-dim text-[11px]">
               {sourceUrl && <>{displayUrl(sourceUrl)} · </>}
@@ -375,17 +375,64 @@ export default function DenseBookmarkDetail({
             )}
           </div>
 
-          <div className="flex flex-col gap-[9px]">
-            <p className={SECTION_LABEL}>Note</p>
-            <NoteEditor
-              bookmark={bookmark}
-              disabled={!isOwner}
-              className="border-k-border bg-k-surface-2 text-k-fg-muted placeholder:text-k-fg-dim min-h-[4.5rem] rounded-[8px] text-[13px] leading-[1.5]"
-            />
-          </div>
+          {/* Note/Attachments/Highlights are utility disclosures, not
+              primary content — grouped with their own tighter rhythm
+              (gap-[10px]) instead of the 22px gap the sections above use,
+              so two collapsed one-line headers don't read as far apart as
+              full content blocks. */}
+          <div className="flex flex-col gap-[10px]">
+            <div className="flex flex-col gap-[9px]">
+              <button
+                type="button"
+                aria-expanded={noteOpen}
+                onClick={() => setNoteOpenOverride(!noteOpen)}
+                className={cn(SECTION_LABEL, "flex items-center gap-[8px]")}
+              >
+                <ChevronRight
+                  size={12}
+                  className={cn(
+                    "transition-transform",
+                    noteOpen && "rotate-90",
+                  )}
+                />
+                Note
+              </button>
+              {noteOpen && (
+                <NoteEditor
+                  bookmark={bookmark}
+                  disabled={!isOwner}
+                  className="border-k-border bg-k-surface-2 text-k-fg-muted placeholder:text-k-fg-dim min-h-[4.5rem] rounded-[8px] text-[13px] leading-[1.5]"
+                />
+              )}
+            </div>
 
-          <AttachmentBox bookmark={bookmark} readOnly={!isOwner} />
-          <HighlightsBox bookmarkId={bookmark.id} readOnly={!isOwner} />
+            <div className="flex flex-col gap-[9px]">
+              <button
+                type="button"
+                aria-expanded={attachmentsOpen}
+                onClick={() => setAttachmentsOpen((open) => !open)}
+                className={cn(SECTION_LABEL, "flex items-center gap-[8px]")}
+              >
+                <ChevronRight
+                  size={12}
+                  className={cn(
+                    "transition-transform",
+                    attachmentsOpen && "rotate-90",
+                  )}
+                />
+                Attachments
+              </button>
+              {attachmentsOpen && (
+                <AttachmentBox
+                  bookmark={bookmark}
+                  readOnly={!isOwner}
+                  headless
+                />
+              )}
+            </div>
+
+            <HighlightsBox bookmarkId={bookmark.id} readOnly={!isOwner} />
+          </div>
         </div>
 
         {/* The archived page is the reference material behind the briefing,

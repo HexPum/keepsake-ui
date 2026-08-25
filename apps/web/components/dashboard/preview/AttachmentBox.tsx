@@ -37,9 +37,18 @@ import {
 export default function AttachmentBox({
   bookmark,
   readOnly = false,
+  headless = false,
 }: {
   bookmark: ZBookmark;
   readOnly?: boolean;
+  /** Skip this component's own label + collapse chrome. Used by the dense
+   *  detail view (DenseBookmarkDetail/MobileBookmarkDetail), which now
+   *  wraps attachments in its own outer disclosure section — matching the
+   *  "Saved page" pattern — and only mounts this component at all when
+   *  that section is open, so an inner collapse would have nothing left
+   *  to do. Upload controls and the asset list still render, just without
+   *  their own header row. */
+  headless?: boolean;
 }) {
   const { t } = useTranslation();
   const { mutate: attachAsset, isPending: isAttaching } =
@@ -100,6 +109,174 @@ export default function AttachmentBox({
 
   const hasAssets = bookmark.assets.length > 0;
 
+  const uploadButtons = !readOnly && (
+    <>
+      {!bookmark.assets.some((asset) => asset.assetType == "bannerImage") &&
+        bookmark.content.type != BookmarkTypes.ASSET && (
+          <FilePickerButton
+            title="Attach a Banner"
+            loading={isAttaching}
+            accept=".jpg,.JPG,.jpeg,.png,.webp"
+            multiple={false}
+            variant="none"
+            size="none"
+            className="rounded-md p-1 hover:text-foreground"
+            onFileSelect={(file) =>
+              uploadAsset(file, {
+                onSuccess: (resp) => {
+                  attachAsset({
+                    bookmarkId: bookmark.id,
+                    asset: {
+                      id: resp.assetId,
+                      assetType: "bannerImage",
+                    },
+                  });
+                },
+              })
+            }
+          >
+            <ImagePlus className="size-3.5" strokeWidth={1.5} />
+          </FilePickerButton>
+        )}
+      <FilePickerButton
+        title="Upload File"
+        loading={isAttaching}
+        multiple={false}
+        variant="none"
+        size="none"
+        className="rounded-md p-1 hover:text-foreground"
+        onFileSelect={(file) =>
+          uploadAsset(file, {
+            onSuccess: (resp) => {
+              attachAsset({
+                bookmarkId: bookmark.id,
+                asset: {
+                  id: resp.assetId,
+                  assetType: "userUploaded",
+                },
+              });
+            },
+          })
+        }
+      >
+        <Paperclip className="size-3.5" strokeWidth={1.5} />
+      </FilePickerButton>
+    </>
+  );
+
+  const assetList = (
+    <>
+      {bookmark.assets.map((asset) => (
+        <div key={asset.id} className="flex items-center justify-between">
+          <Link
+            target="_blank"
+            href={getAssetUrl(asset.id)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            prefetch={false}
+          >
+            {ASSET_TYPE_TO_ICON[asset.assetType]}
+            <p>
+              {asset.assetType === "userUploaded" && asset.fileName
+                ? asset.fileName
+                : humanFriendlyNameForAssertType(asset.assetType)}
+            </p>
+          </Link>
+          <div className="flex gap-1 text-muted-foreground">
+            <Link
+              title="Download"
+              target="_blank"
+              href={getAssetUrl(asset.id)}
+              className="flex items-center gap-1 rounded-md p-1 hover:text-foreground"
+              download={
+                asset.assetType === "userUploaded" && asset.fileName
+                  ? asset.fileName
+                  : humanFriendlyNameForAssertType(asset.assetType)
+              }
+              prefetch={false}
+            >
+              <Download className="size-3.5" strokeWidth={1.5} />
+            </Link>
+            {!readOnly &&
+              isAllowedToAttachAsset(asset.assetType) &&
+              asset.assetType !== "userUploaded" && (
+                <FilePickerButton
+                  title="Replace"
+                  loading={isReplacing}
+                  accept=".jgp,.JPG,.jpeg,.png,.webp"
+                  multiple={false}
+                  variant="none"
+                  size="none"
+                  className="flex items-center gap-2 rounded-md p-1 hover:text-foreground"
+                  onFileSelect={(file) =>
+                    uploadAsset(file, {
+                      onSuccess: (resp) => {
+                        replaceAsset({
+                          bookmarkId: bookmark.id,
+                          oldAssetId: asset.id,
+                          newAssetId: resp.assetId,
+                        });
+                      },
+                    })
+                  }
+                >
+                  <Pencil className="size-3.5" strokeWidth={1.5} />
+                </FilePickerButton>
+              )}
+            {!readOnly && isAllowedToDetachAsset(asset.assetType) && (
+              <ActionConfirmingDialog
+                title="Delete Attachment?"
+                description={`Are you sure you want to delete the attachment of the bookmark?`}
+                actionButton={(setDialogOpen) => (
+                  <ActionButton
+                    loading={isDetaching}
+                    variant="destructive"
+                    onClick={() =>
+                      detachAsset(
+                        { bookmarkId: bookmark.id, assetId: asset.id },
+                        { onSettled: () => setDialogOpen(false) },
+                      )
+                    }
+                  >
+                    <Trash2 className="mr-2 size-4" />
+                    Delete
+                  </ActionButton>
+                )}
+              >
+                <Button
+                  variant="none"
+                  size="none"
+                  title="Delete"
+                  className="rounded-md p-1 hover:text-foreground"
+                >
+                  <Trash2 className="size-3.5" strokeWidth={1.5} />
+                </Button>
+              </ActionConfirmingDialog>
+            )}
+          </div>
+        </div>
+      ))}
+      {!hasAssets && readOnly && (
+        <p className="py-1 text-xs text-muted-foreground">No attachments</p>
+      )}
+      {!hasAssets && !readOnly && (
+        <p className="py-1 text-xs text-muted-foreground">No attachments yet</p>
+      )}
+    </>
+  );
+
+  if (headless) {
+    return (
+      <div className="flex flex-col gap-1 text-sm">
+        {uploadButtons && (
+          <div className="flex items-center justify-end gap-1">
+            {uploadButtons}
+          </div>
+        )}
+        {assetList}
+      </div>
+    );
+  }
+
   return (
     // Collapsed by default when there's an existing list to declutter — but
     // not when it's empty: the trigger below only renders when `hasAssets`,
@@ -110,62 +287,7 @@ export default function AttachmentBox({
       <div className="flex w-full items-center justify-between gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {t("common.attachments")}
         <div className="flex items-center gap-1">
-          {!readOnly && (
-            <>
-              {!bookmark.assets.some(
-                (asset) => asset.assetType == "bannerImage",
-              ) &&
-                bookmark.content.type != BookmarkTypes.ASSET && (
-                  <FilePickerButton
-                    title="Attach a Banner"
-                    loading={isAttaching}
-                    accept=".jpg,.JPG,.jpeg,.png,.webp"
-                    multiple={false}
-                    variant="none"
-                    size="none"
-                    className="rounded-md p-1 hover:text-foreground"
-                    onFileSelect={(file) =>
-                      uploadAsset(file, {
-                        onSuccess: (resp) => {
-                          attachAsset({
-                            bookmarkId: bookmark.id,
-                            asset: {
-                              id: resp.assetId,
-                              assetType: "bannerImage",
-                            },
-                          });
-                        },
-                      })
-                    }
-                  >
-                    <ImagePlus className="size-3.5" strokeWidth={1.5} />
-                  </FilePickerButton>
-                )}
-              <FilePickerButton
-                title="Upload File"
-                loading={isAttaching}
-                multiple={false}
-                variant="none"
-                size="none"
-                className="rounded-md p-1 hover:text-foreground"
-                onFileSelect={(file) =>
-                  uploadAsset(file, {
-                    onSuccess: (resp) => {
-                      attachAsset({
-                        bookmarkId: bookmark.id,
-                        asset: {
-                          id: resp.assetId,
-                          assetType: "userUploaded",
-                        },
-                      });
-                    },
-                  })
-                }
-              >
-                <Paperclip className="size-3.5" strokeWidth={1.5} />
-              </FilePickerButton>
-            </>
-          )}
+          {uploadButtons}
           {hasAssets && (
             <CollapsibleTrigger>
               <ChevronsDownUp className="size-4" />
@@ -174,103 +296,7 @@ export default function AttachmentBox({
         </div>
       </div>
       <CollapsibleContent className="flex flex-col gap-1 py-3 text-sm">
-        {bookmark.assets.map((asset) => (
-          <div key={asset.id} className="flex items-center justify-between">
-            <Link
-              target="_blank"
-              href={getAssetUrl(asset.id)}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-              prefetch={false}
-            >
-              {ASSET_TYPE_TO_ICON[asset.assetType]}
-              <p>
-                {asset.assetType === "userUploaded" && asset.fileName
-                  ? asset.fileName
-                  : humanFriendlyNameForAssertType(asset.assetType)}
-              </p>
-            </Link>
-            <div className="flex gap-1 text-muted-foreground">
-              <Link
-                title="Download"
-                target="_blank"
-                href={getAssetUrl(asset.id)}
-                className="flex items-center gap-1 rounded-md p-1 hover:text-foreground"
-                download={
-                  asset.assetType === "userUploaded" && asset.fileName
-                    ? asset.fileName
-                    : humanFriendlyNameForAssertType(asset.assetType)
-                }
-                prefetch={false}
-              >
-                <Download className="size-3.5" strokeWidth={1.5} />
-              </Link>
-              {!readOnly &&
-                isAllowedToAttachAsset(asset.assetType) &&
-                asset.assetType !== "userUploaded" && (
-                  <FilePickerButton
-                    title="Replace"
-                    loading={isReplacing}
-                    accept=".jgp,.JPG,.jpeg,.png,.webp"
-                    multiple={false}
-                    variant="none"
-                    size="none"
-                    className="flex items-center gap-2 rounded-md p-1 hover:text-foreground"
-                    onFileSelect={(file) =>
-                      uploadAsset(file, {
-                        onSuccess: (resp) => {
-                          replaceAsset({
-                            bookmarkId: bookmark.id,
-                            oldAssetId: asset.id,
-                            newAssetId: resp.assetId,
-                          });
-                        },
-                      })
-                    }
-                  >
-                    <Pencil className="size-3.5" strokeWidth={1.5} />
-                  </FilePickerButton>
-                )}
-              {!readOnly && isAllowedToDetachAsset(asset.assetType) && (
-                <ActionConfirmingDialog
-                  title="Delete Attachment?"
-                  description={`Are you sure you want to delete the attachment of the bookmark?`}
-                  actionButton={(setDialogOpen) => (
-                    <ActionButton
-                      loading={isDetaching}
-                      variant="destructive"
-                      onClick={() =>
-                        detachAsset(
-                          { bookmarkId: bookmark.id, assetId: asset.id },
-                          { onSettled: () => setDialogOpen(false) },
-                        )
-                      }
-                    >
-                      <Trash2 className="mr-2 size-4" />
-                      Delete
-                    </ActionButton>
-                  )}
-                >
-                  <Button
-                    variant="none"
-                    size="none"
-                    title="Delete"
-                    className="rounded-md p-1 hover:text-foreground"
-                  >
-                    <Trash2 className="size-3.5" strokeWidth={1.5} />
-                  </Button>
-                </ActionConfirmingDialog>
-              )}
-            </div>
-          </div>
-        ))}
-        {!hasAssets && readOnly && (
-          <p className="py-1 text-xs text-muted-foreground">No attachments</p>
-        )}
-        {!hasAssets && !readOnly && (
-          <p className="py-1 text-xs text-muted-foreground">
-            No attachments yet
-          </p>
-        )}
+        {assetList}
       </CollapsibleContent>
     </Collapsible>
   );
