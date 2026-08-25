@@ -4,13 +4,15 @@
  * Scoped under `.k-dense` so the rest of the app (settings, admin, ...)
  * is completely unaffected.
  *
- * The prototype exposes three theme axes, all switchable at runtime (see
- * lib/dense/theme.ts and the header's "Theme" menu) — the values below are
- * just their defaults, present so the page looks right before that JS runs
- * and so nothing breaks if it doesn't:
+ * The prototype exposes three theme axes; a fourth (Font) is this fork's own
+ * addition, not from the prototype. All four are switchable at runtime (see
+ * lib/dense/theme.ts and the header's "View options" menu) — the values
+ * below are just their defaults, present so the page looks right before
+ * that JS runs and so nothing breaks if it doesn't:
  *   accent          = #7C5DFF  (violet)
  *   surfaceTone     = Deep slate
  *   readingEmphasis = Title-led
+ *   font            = Plex Sans
  */
 .k-dense {
   /* surfaceTone: Deep slate */
@@ -65,6 +67,13 @@
      in the same motion vocabulary as that hover rule. */
   --k-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --k-sidebar-duration: 180ms;
+
+  /* font: Plex Sans. One of four choices (lib/dense/theme.ts's
+     FONT_PAIRINGS) — all four are loaded (dashboard/layout.tsx) regardless
+     of which is active, so switching is just repointing this at another
+     already-defined `--font-k-sans-*` variable; overridden inline on <html>
+     by useDenseTheme, same mechanism as the other axes above. */
+  --font-k-sans: var(--font-k-sans-plex);
 
   background-color: var(--k-bg);
   color: var(--k-fg);

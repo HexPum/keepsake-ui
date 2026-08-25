@@ -1,6 +1,11 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
-import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import {
+  IBM_Plex_Mono,
+  IBM_Plex_Sans,
+  Inter,
+  Source_Serif_4,
+} from "next/font/google";
 import ErrorFallback from "@/components/dashboard/ErrorFallback";
 import DenseShortcutsHelp from "@/components/dashboard/dense/DenseShortcutsHelp";
 import DenseSidebar from "@/components/dashboard/dense/DenseSidebar";
@@ -24,11 +29,35 @@ import { tryCatch } from "@karakeep/shared/tryCatch";
 
 import "./dense-theme.css";
 
+// Four self-hosted candidates for the runtime-switchable "Font" preset (see
+// lib/dense/theme.ts's FONT_PAIRINGS + DenseFilesView's picker) — all loaded
+// up front so every choice's CSS variable exists no matter which is active;
+// switching just repoints --font-k-sans at one of these (or, for "system", a
+// literal OS stack with nothing to load). Each keeps its own `--font-k-sans-*`
+// variable name rather than claiming the shared `--font-k-sans` directly, so
+// none of them fight over that name — dense-theme.css's own default points
+// it at -plex, and useDenseTheme (lib/dense/theme.ts) overrides it from
+// there. Mono stays a single fixed face (not part of the picker): it's only
+// ever used for small structural labels/timestamps, not reading content.
 const plexSans = IBM_Plex_Sans({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
-  variable: "--font-k-sans",
+  variable: "--font-k-sans-plex",
   fallback: ["sans-serif"],
+});
+
+const interSans = Inter({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-k-sans-inter",
+  fallback: ["sans-serif"],
+});
+
+const serifSans = Source_Serif_4({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-k-sans-serif",
+  fallback: ["serif"],
 });
 
 const plexMono = IBM_Plex_Mono({
@@ -37,6 +66,8 @@ const plexMono = IBM_Plex_Mono({
   variable: "--font-k-mono",
   fallback: ["monospace"],
 });
+
+const FONT_VARIABLES = `${plexSans.variable} ${interSans.variable} ${serifSans.variable} ${plexMono.variable}`;
 
 export default async function Dashboard({
   children,
@@ -80,13 +111,11 @@ export default async function Dashboard({
         <DenseScaleProvider>
           <DenseThemeProvider>
             <div
-              className={`k-dense k-dense-zoom dark ${plexSans.variable} ${plexMono.variable} sm:fixed sm:inset-0 sm:overflow-hidden`}
+              className={`k-dense k-dense-zoom dark ${FONT_VARIABLES} sm:fixed sm:inset-0 sm:overflow-hidden`}
             >
               {/* Radix portals (dropdowns/dialogs) escape this wrapper in the
               DOM, so mirror its theme classes onto <html> too. */}
-              <ForceDenseTheme
-                fontClassNames={`${plexSans.variable} ${plexMono.variable}`}
-              />
+              <ForceDenseTheme fontClassNames={FONT_VARIABLES} />
               {/* h-full, not 100dvh: under `zoom` the wrapper above already
               resolves to exactly the viewport, whereas viewport units would
               be re-divided by the zoom factor and overflow. */}

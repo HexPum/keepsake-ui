@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FavouritedActionIcon } from "@/components/dashboard/bookmarks/icons";
+import { useDenseThemeContext } from "@/components/dashboard/dense/DenseThemeController";
 import {
   getDenseRowSource,
   getDenseRowTitle,
@@ -26,6 +27,7 @@ export function DenseBookmarkCard({
 }) {
   const bookmark = useLiveBookmark(initialBookmark);
   const { mutate: updateBookmark, isPending } = useUpdateBookmark({});
+  const { preference: theme } = useDenseThemeContext();
 
   const title = getDenseRowTitle(bookmark);
   const source = getDenseRowSource(bookmark);
@@ -84,7 +86,7 @@ export function DenseBookmarkCard({
         >
           {title}
         </Link>
-        {!isPendingSummary && bookmark.summary && (
+        {!isPendingSummary && bookmark.summary && theme.showSummaryIcon && (
           <Sparkles size={13} className="text-k-accent flex-none opacity-65" />
         )}
       </div>

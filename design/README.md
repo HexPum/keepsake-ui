@@ -242,6 +242,18 @@ between title and summary — worth reproducing as a user preference:
 | card title weight | 650 | 600 | 550 |
 | card title size | 17px | 16px | 14.5px |
 
+This fork also adds a **Font** axis — not from the prototype, but switchable
+alongside reading-emphasis the same way:
+
+| | Plex Sans (default) | Inter | Serif | System |
+| --- | --- | --- | --- | --- |
+| UI face | IBM Plex Sans | Inter | Source Serif 4 | OS default sans stack |
+| Feel | current default | neutral, widely-used UI sans | book-like reading face | zero-download, platform-native |
+
+All four apply to the whole UI, not just reading content. The mono face stays
+fixed at **IBM Plex Mono** regardless of this choice — it's only ever used
+for structural labels/timestamps, not prose.
+
 ### Spacing
 4 / 5 / 6 / 8 / 9 / 10 / 12 / 14 / 16 / 18 / 22 px. Rows `14px 18px`; header
 `15px 22px 12px`; sidebar `14px 10px`.

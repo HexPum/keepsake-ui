@@ -5,21 +5,24 @@ import { useCallback, useEffect, useState } from "react";
 /**
  * The three theme axes the prototype (`design/Karakeep Dark.dc.html`)
  * exposes as a `dc-script` control panel — accent colour, surface tone, and
- * reading emphasis — made real as a user-facing picker. Values transcribed
- * from `design/README.md`'s design-tokens tables; nothing here is invented.
+ * reading emphasis — made real as a user-facing picker, plus a fourth axis
+ * (Font) this fork adds on its own. Values transcribed from
+ * `design/README.md`'s design-tokens tables; nothing here is invented.
  *
  * Each preset is a full set of CSS custom-property values. A chosen
  * combination is applied by writing those properties as inline styles on
  * `<html>`, the same mechanism `--k-zoom` already uses (see
  * DenseScaleController) — inline styles override `dense-theme.css`'s
  * class-based defaults by origin, so the CSS file's own values stay the
- * literal defaults (violet / Deep slate / Title-led) with no JS required to
- * see them; the hook only needs to write the properties that changed.
+ * literal defaults (violet / Deep slate / Title-led / Plex Sans) with no JS
+ * required to see them; the hook only needs to write the properties that
+ * changed.
  */
 
 export type Accent = "mint" | "violet" | "amber" | "blue";
 export type SurfaceTone = "charcoal" | "true-black" | "deep-slate";
 export type ReadingEmphasis = "title-led" | "balanced" | "summary-led";
+export type FontPairing = "plex" | "inter" | "serif" | "system";
 
 export const ACCENTS: {
   id: Accent;
@@ -153,6 +156,36 @@ export const READING_EMPHASES: EmphasisPreset[] = [
 ];
 
 /**
+ * The fork's own fourth axis (not from the prototype) — see
+ * `design/README.md`'s Typography section. All four faces are self-hosted
+ * via next/font (dashboard/layout.tsx loads all of them up front, each under
+ * its own `--font-k-sans-*` variable, regardless of which is active) except
+ * `system`, which needs no font file at all. `cssValue` is what
+ * `cssVarsFor` below writes into the one variable the UI actually reads,
+ * `--font-k-sans` (dense-theme.css) — a `var()` indirection to whichever
+ * `--font-k-sans-<id>` next/font defined, or a literal stack for `system`.
+ *
+ * Mono is deliberately not part of this axis: `--font-k-mono` stays fixed at
+ * IBM Plex Mono regardless of which of these is active, since it's only ever
+ * used for structural labels/timestamps, not reading content.
+ */
+export const FONT_PAIRINGS: {
+  id: FontPairing;
+  label: string;
+  cssValue: string;
+}[] = [
+  { id: "plex", label: "Plex Sans", cssValue: "var(--font-k-sans-plex)" },
+  { id: "inter", label: "Inter", cssValue: "var(--font-k-sans-inter)" },
+  { id: "serif", label: "Serif", cssValue: "var(--font-k-sans-serif)" },
+  {
+    id: "system",
+    label: "System",
+    cssValue:
+      '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+  },
+];
+
+/**
  * List "dots" (sidebar) and similar small categorical swatches need a few
  * distinct colours, not just the one active accent. Rather than a second,
  * separately-maintained palette, these are drawn from the same four
@@ -171,6 +204,8 @@ export function topicColorsFor(accent: Accent): string[] {
 export const DEFAULT_ACCENT: Accent = "violet";
 export const DEFAULT_TONE: SurfaceTone = "deep-slate";
 export const DEFAULT_EMPHASIS: ReadingEmphasis = "title-led";
+export const DEFAULT_SHOW_SUMMARY_ICON = true;
+export const DEFAULT_FONT: FontPairing = "plex";
 
 const STORAGE_KEY = "k-dense-theme";
 
@@ -178,12 +213,20 @@ export interface DenseThemePreference {
   accent: Accent;
   tone: SurfaceTone;
   emphasis: ReadingEmphasis;
+  /** The small sparkle next to a row/card title marking it AI-summarised
+   *  (DenseBookmarkRow, DenseBookmarkCard) — not a CSS-var-driven axis like
+   *  the three above, just a plain flag those two components read directly
+   *  off the context. */
+  showSummaryIcon: boolean;
+  font: FontPairing;
 }
 
 const DEFAULT_PREFERENCE: DenseThemePreference = {
   accent: DEFAULT_ACCENT,
   tone: DEFAULT_TONE,
   emphasis: DEFAULT_EMPHASIS,
+  showSummaryIcon: DEFAULT_SHOW_SUMMARY_ICON,
+  font: DEFAULT_FONT,
 };
 
 function parsePreference(stored: string | null): DenseThemePreference {
@@ -200,6 +243,13 @@ function parsePreference(stored: string | null): DenseThemePreference {
       emphasis: READING_EMPHASES.some((e) => e.id === parsed.emphasis)
         ? (parsed.emphasis as ReadingEmphasis)
         : DEFAULT_EMPHASIS,
+      font: FONT_PAIRINGS.some((f) => f.id === parsed.font)
+        ? (parsed.font as FontPairing)
+        : DEFAULT_FONT,
+      showSummaryIcon:
+        typeof parsed.showSummaryIcon === "boolean"
+          ? parsed.showSummaryIcon
+          : DEFAULT_SHOW_SUMMARY_ICON,
     };
   } catch {
     return DEFAULT_PREFERENCE;
@@ -214,9 +264,11 @@ function cssVarsFor(pref: DenseThemePreference): Record<string, string> {
   const accent = ACCENTS.find((a) => a.id === pref.accent)!;
   const tone = SURFACE_TONES.find((t) => t.id === pref.tone)!;
   const emph = READING_EMPHASES.find((e) => e.id === pref.emphasis)!;
+  const font = FONT_PAIRINGS.find((f) => f.id === pref.font)!;
 
   return {
     "--k-accent": accent.hex,
+    "--font-k-sans": font.cssValue,
     "--k-bg": tone.bg,
     "--k-surface-1": tone.surface1,
     "--k-surface-2": tone.surface2,

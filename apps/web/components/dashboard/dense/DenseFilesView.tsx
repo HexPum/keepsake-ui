@@ -10,7 +10,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatRelativeSince } from "@/lib/dense/format";
-import { ACCENTS, READING_EMPHASES, SURFACE_TONES } from "@/lib/dense/theme";
+import {
+  ACCENTS,
+  FONT_PAIRINGS,
+  READING_EMPHASES,
+  SURFACE_TONES,
+} from "@/lib/dense/theme";
 import { MAX_SCALE, MIN_SCALE } from "@/lib/dense/useDenseScale";
 import { useSortOrderStore } from "@/lib/store/useSortOrderStore";
 import { cn } from "@/lib/utils";
@@ -18,6 +23,8 @@ import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import {
   ArrowDownAZ,
   ArrowUpAZ,
+  Eye,
+  EyeOff,
   LayoutGrid,
   List as ListIcon,
   Maximize2,
@@ -520,6 +527,40 @@ export default function DenseFilesView({
                       </button>
                     ))}
                   </div>
+                  <DropdownMenuLabel>Font</DropdownMenuLabel>
+                  <div className="flex gap-[6px] px-2 pb-1.5">
+                    {FONT_PAIRINGS.map((f) => (
+                      <button
+                        key={f.id}
+                        type="button"
+                        aria-pressed={theme.font === f.id}
+                        onClick={() => setTheme({ font: f.id })}
+                        className={cn(
+                          "flex-1 rounded-[6px] border px-[6px] py-[5px] text-[10.5px] transition-colors",
+                          theme.font === f.id
+                            ? "border-k-accent-border text-k-fg bg-k-border-soft"
+                            : "border-k-border text-k-fg-muted hover:text-k-fg-soft",
+                        )}
+                      >
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() =>
+                      setTheme({ showSummaryIcon: !theme.showSummaryIcon })
+                    }
+                  >
+                    {theme.showSummaryIcon ? (
+                      <EyeOff className="mr-2 size-4" />
+                    ) : (
+                      <Eye className="mr-2 size-4" />
+                    )}
+                    {theme.showSummaryIcon
+                      ? "Hide summary icon"
+                      : "Show summary icon"}
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
               {/* Segmented view toggle. Same shell height as every other
