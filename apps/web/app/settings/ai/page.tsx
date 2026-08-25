@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import AISettings from "@/components/settings/AISettings";
 import { useTranslation } from "@/lib/i18n/server";
+import { getServerAuthSession } from "@/server/auth";
 
 export async function generateMetadata(): Promise<Metadata> {
   // oxlint-disable-next-line rules-of-hooks
@@ -10,6 +11,8 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default function AISettingsPage() {
-  return <AISettings />;
+export default async function AISettingsPage() {
+  const session = await getServerAuthSession();
+  const isAdmin = session?.user.role === "admin";
+  return <AISettings isAdmin={isAdmin} />;
 }

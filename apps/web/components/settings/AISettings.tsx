@@ -59,6 +59,7 @@ import {
 } from "@karakeep/shared/types/prompts";
 import { zUpdateUserSettingsSchema } from "@karakeep/shared/types/users";
 
+import { AIProviderSettings } from "./AIProviderSettings";
 import { SettingsPage, SettingsSection } from "./SettingsPage";
 
 export function AIPreferences() {
@@ -872,10 +873,11 @@ export function PromptDemo() {
   );
 }
 
-export default function AISettings() {
+export default function AISettings({ isAdmin }: { isAdmin?: boolean }) {
   const { t } = useTranslation();
   return (
     <SettingsPage title={t("settings.ai.ai_settings")}>
+      {isAdmin && <AIProviderSettings />}
       <AIPreferences />
       <TagStyleSelector />
       <CuratedTagsSelector />
