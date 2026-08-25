@@ -19,6 +19,13 @@ Entry template:
 **Prevention:** ...
 -->
 
+## 2026-08-25 — Detail-view icon order guessed instead of stated back, spacing shipped unverified
+
+**What happened:** Asked to add a "more" icon next to Favourite/Archive in the bookmark detail top bar (removing two now-redundant icons), it was appended in reading order (Favourite, Archive, More) — mirroring where the old icons used to sit — without restating the intended left-to-right order back to the user first. Separately, the new Note/Attachments collapse sections were shipped with a spacing value (gap-[22px], inherited from the surrounding content rhythm) chosen without visual feedback, since the Chrome extension was disconnected at the time. The user visually reviewed and corrected both: order should be more → archive → favourite, and the gap around the collapsed Note/Attachments rows (plus the trailing gap before the divider below them) was too generous for two one-line headers.
+**Root cause:** New-element placement defaulted to "wherever fits in the existing code order" rather than being explicitly confirmed, since the request didn't spell out a position. Spacing was carried over from a value tuned for full-height content blocks (Summary, Key points) without reconsidering that a collapsed one-line disclosure row has very different visual weight — and it was presented as finished despite no visual check having been possible.
+**Consequence:** A second small correction round: reorder the icons (both desktop and mobile, for consistency) and rework the spacing into a tighter grouped rhythm (gap-[10px]) plus a reduced trailing container padding.
+**Prevention:** When adding a control near existing ones and the exact position isn't specified, state the intended left-to-right order back before or right after implementing rather than assuming appended-at-the-end is fine. When a spacing/layout value can't be visually verified (tool unavailable, etc.), say so explicitly and flag the chosen number as a first guess needing a look, rather than presenting it as done — don't let "preflight passed" stand in for "looks right on screen" (repeat of the stale-cache/hover-invisible failure mode below: code-correct isn't screen-correct).
+
 ## 2026-08-21 — Hover states present in code but imperceptible (invisible on the near-black bg)
 
 **What happened:** After the hover sweep (fix #3), the user still saw "no hover" on sidebar nav rows and bookmark list rows. The hover classes WERE there — but used a dark token at reduced opacity (`hover:bg-k-surface-1/60`, `hover:bg-k-border-soft/60`) whose per-channel delta from the base bg was only +4/+5/+6, effectively invisible.
