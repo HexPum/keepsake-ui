@@ -351,7 +351,20 @@ export default function DenseBookmarkDetail({
 
           <div className="border-k-border flex flex-col gap-[10px] border-t pt-[16px]">
             {tagEditorOpen ? (
-              <BookmarkTagsEditor bookmark={bookmark} disabled={!isOwner} />
+              <div className="flex flex-col gap-[8px]">
+                <div className="flex items-center justify-between">
+                  <p className={SECTION_LABEL}>Tags</p>
+                  <button
+                    type="button"
+                    aria-label="Done editing tags"
+                    onClick={() => setTagEditorOpen(false)}
+                    className={ACTION_ICON}
+                  >
+                    <X size={14} strokeWidth={1.75} />
+                  </button>
+                </div>
+                <BookmarkTagsEditor bookmark={bookmark} disabled={!isOwner} />
+              </div>
             ) : (
               <div className="flex flex-wrap items-center gap-[6px]">
                 {bookmark.tags.map((tag) => (

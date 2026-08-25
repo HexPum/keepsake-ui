@@ -327,7 +327,7 @@ export function TagsEditor({
           <PopoverTrigger asChild>
             <div
               className={cn(
-                "relative flex min-h-10 w-full flex-wrap items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
+                "border-k-border bg-k-surface-2 text-k-fg ring-offset-k-bg focus-within:ring-k-accent relative flex min-h-10 w-full flex-wrap items-center gap-2 rounded-[8px] border px-3 py-2 text-[13px] focus-within:ring-2 focus-within:ring-offset-2",
                 isDisabled && "cursor-not-allowed opacity-50",
               )}
             >
@@ -337,10 +337,10 @@ export function TagsEditor({
                     <div
                       key={tag.id}
                       className={cn(
-                        "flex min-h-8 space-x-1 rounded px-2",
+                        "flex min-h-8 space-x-1 rounded-full px-2",
                         tag.attachedBy == "ai"
-                          ? "bg-purple-500 text-white"
-                          : "bg-accent",
+                          ? "bg-k-accent text-k-accent-fg"
+                          : "border-k-border bg-k-surface-1 text-k-fg border",
                       )}
                     >
                       <div className="m-auto flex min-w-0 gap-2">
@@ -387,19 +387,19 @@ export function TagsEditor({
                 onKeyDown={handleKeyDown}
                 onValueChange={(v) => setInputValue(v)}
                 placeholder={visiblePlaceholder}
-                className="bg-transparent outline-none placeholder:text-muted-foreground"
+                className="text-k-fg placeholder:text-k-fg-dim bg-transparent outline-none"
                 style={{ width: `${inputWidth}ch` }}
                 disabled={isDisabled}
               />
               {isExistingTagsLoading && (
                 <div className="absolute bottom-2 right-2">
-                  <Loader2 className="h-4 w-4 animate-spin opacity-50" />
+                  <Loader2 className="text-k-fg-dim h-4 w-4 animate-spin" />
                 </div>
               )}
             </div>
           </PopoverTrigger>
           <PopoverContent
-            className="w-[--radix-popover-trigger-width] p-0"
+            className="border-k-border bg-k-surface-1 text-k-fg w-[--radix-popover-trigger-width] p-0"
             align="start"
             onWheel={(e) => e.stopPropagation()}
           >
