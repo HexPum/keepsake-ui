@@ -3,11 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import {
-  useBookmarkSearch,
-  useBookmarkSearchState,
-  useDoBookmarkSearch,
-} from "@/lib/hooks/bookmark-search";
+import { SearchMatchText } from "@/components/dashboard/dense/SearchMatchText";
 import {
   getDenseRowSource,
   getDenseRowTitle,
@@ -16,7 +12,13 @@ import {
   estimateReadingTimeMinutes,
   formatCompactRelativeTime,
 } from "@/lib/dense/format";
+import { matchSnippet, queryMatches } from "@/lib/dense/searchHighlight";
 import { summaryPreview } from "@/lib/dense/summary";
+import {
+  useBookmarkSearch,
+  useBookmarkSearchState,
+  useDoBookmarkSearch,
+} from "@/lib/hooks/bookmark-search";
 import { cn } from "@/lib/utils";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import Lenis from "lenis";
@@ -55,7 +57,7 @@ const isUnread = (b: ZBookmark) => b.summarizationStatus === "pending";
  */
 export function MobileSearchHome() {
   const api = useTRPC();
-  const { searchQuery } = useBookmarkSearchState();
+  const { searchQuery, parsedSearchQuery } = useBookmarkSearchState();
   const { debounceSearch } = useDoBookmarkSearch();
   const [inputValue, setInputValue] = useState(searchQuery);
   const [filter, setFilter] = useState<Filter>("all");
@@ -286,6 +288,7 @@ export function MobileSearchHome() {
                 onSwipeStart={() => setSwiping(b.id)}
                 onSwipeEnd={() => setSwiping(null)}
                 onArchive={() => setArchived((prev) => [...prev, b.id])}
+                searchQuery={parsedSearchQuery.text}
               />
             ))}
 
@@ -354,12 +357,16 @@ function DenseRow({
   onSwipeStart,
   onSwipeEnd,
   onArchive,
+  searchQuery = "",
 }: {
   bookmark: ZBookmark;
   swiping: boolean;
   onSwipeStart: () => void;
   onSwipeEnd: () => void;
   onArchive: () => void;
+  /** Free-text portion of an active search query (see parsedSearchQuery) —
+   *  a no-op outside of search results, where this is omitted. */
+  searchQuery?: string;
 }) {
   const { mutate: updateBookmark } = useUpdateBookmark({});
   const [touchStartX, setTouchStartX] = useState(0);
@@ -390,6 +397,15 @@ function DenseRow({
   const domain = getDenseRowSource(b);
   const readingMinutes = estimateReadingTimeMinutes(b.summary);
   const summary = summaryPreview(b.summary);
+
+  // A note snippet is only worth showing when it's *why* this row matched —
+  // see the identical comment on DenseBookmarkRow (the desktop equivalent).
+  const noteSnippet =
+    searchQuery.trim() &&
+    !queryMatches(title, searchQuery) &&
+    !queryMatches(summary, searchQuery)
+      ? matchSnippet(b.note ?? "", searchQuery)
+      : null;
 
   return (
     <div style={{ position: "relative", overflow: "hidden" }}>
@@ -514,7 +530,7 @@ function DenseRow({
               flex: 1,
             }}
           >
-            {title}
+            <SearchMatchText text={title} query={searchQuery} />
           </span>
           <div
             style={{
@@ -620,9 +636,26 @@ function DenseRow({
               overflow: "hidden",
             }}
           >
-            {summary}
+            <SearchMatchText text={summary} query={searchQuery} />
           </p>
         ) : null}
+
+        {noteSnippet && (
+          <p
+            style={{
+              fontSize: 12,
+              color: "var(--k-fg-dim)",
+              lineHeight: 1.4,
+              margin: 0,
+              fontStyle: "italic",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <SearchMatchText text={noteSnippet} query={searchQuery} />
+          </p>
+        )}
 
         <div
           style={{

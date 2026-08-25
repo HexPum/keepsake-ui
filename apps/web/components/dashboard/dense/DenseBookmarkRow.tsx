@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { FavouritedActionIcon } from "@/components/dashboard/bookmarks/icons";
+import { useDenseThemeContext } from "@/components/dashboard/dense/DenseThemeController";
+import { SearchMatchText } from "@/components/dashboard/dense/SearchMatchText";
 import {
   getDenseRowSource,
   getDenseRowTitle,
@@ -10,6 +12,7 @@ import {
   estimateReadingTimeMinutes,
   formatCompactRelativeTime,
 } from "@/lib/dense/format";
+import { matchSnippet, queryMatches } from "@/lib/dense/searchHighlight";
 import { summaryPreview } from "@/lib/dense/summary";
 import { useLiveBookmark } from "@/lib/dense/useLiveBookmark";
 import { useRowNavigate } from "@/lib/dense/useRowNavigate";
@@ -26,12 +29,19 @@ import { DenseRowOverflowMenu } from "./DenseRowOverflowMenu";
 export function DenseBookmarkRow({
   bookmark: initialBookmark,
   selected,
+  searchQuery = "",
 }: {
   bookmark: ZBookmark;
   selected?: boolean;
+  /** Free-text portion of an active search query (see
+   *  parseSearchQuery/parsedSearchQuery — not the raw query string, which
+   *  may also carry `is:`/`tag:` qualifiers that aren't text to highlight).
+   *  Omitted outside of search results, where this is a no-op. */
+  searchQuery?: string;
 }) {
   const bookmark = useLiveBookmark(initialBookmark);
   const { mutate: updateBookmark, isPending } = useUpdateBookmark({});
+  const { preference: theme } = useDenseThemeContext();
   const api = useTRPC();
   // One query per visible row, same pattern HighlightsBox uses for the
   // detail view — httpBatchLink (trpc-provider.tsx) coalesces the many rows
@@ -50,6 +60,17 @@ export function DenseBookmarkRow({
   const readingMinutes = estimateReadingTimeMinutes(bookmark.summary);
   const summary = summaryPreview(bookmark.summary);
   const navigate = useRowNavigate(`/dashboard/preview/${bookmark.id}`);
+
+  // A note snippet is only ever worth showing when it's *why* this row
+  // matched — title/summary already surface their own matches in place, so
+  // showing the note too whenever it merely also contains the word would
+  // just repeat the highlight for no new information.
+  const noteSnippet =
+    searchQuery.trim() &&
+    !queryMatches(title, searchQuery) &&
+    !queryMatches(summary, searchQuery)
+      ? matchSnippet(bookmark.note ?? "", searchQuery)
+      : null;
 
   return (
     <div
@@ -71,14 +92,14 @@ export function DenseBookmarkRow({
               isPendingSummary ? "text-k-fg-soft" : "text-k-fg",
             )}
           >
-            {title}
+            <SearchMatchText text={title} query={searchQuery} />
           </Link>
           {isPendingSummary ? (
             <span className="border-k-border font-k-mono text-k-fg-dim inline-flex flex-none items-center gap-[5px] rounded-[4px] border px-[5px] py-px text-[9.5px] font-medium uppercase tracking-[0.06em]">
               <span className="bg-k-fg-dim size-1 rounded-full" />
               Summarising
             </span>
-          ) : isSummarised ? (
+          ) : isSummarised && theme.showSummaryIcon ? (
             <Sparkles
               size={13}
               className="text-k-accent flex-none opacity-65"
@@ -100,9 +121,21 @@ export function DenseBookmarkRow({
             }}
             className="text-k-summary line-clamp-2 max-w-[640px] [text-wrap:pretty]"
           >
-            {summary}
+            <SearchMatchText text={summary} query={searchQuery} />
           </p>
         ) : null}
+
+        {noteSnippet && (
+          <p
+            style={{
+              fontSize: "var(--k-row-summary-size)",
+              lineHeight: "var(--k-summary-lh)",
+            }}
+            className="text-k-fg-dim line-clamp-1 max-w-[640px] italic [text-wrap:pretty]"
+          >
+            <SearchMatchText text={noteSnippet} query={searchQuery} />
+          </p>
+        )}
 
         <div
           className={cn(

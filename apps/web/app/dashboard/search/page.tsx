@@ -15,7 +15,7 @@ import { Search } from "lucide-react";
 import { useInView } from "react-intersection-observer";
 
 function SearchComp() {
-  const { searchQuery } = useBookmarkSearchState();
+  const { searchQuery, parsedSearchQuery } = useBookmarkSearchState();
   const { debounceSearch } = useDoBookmarkSearch();
   const hasQuery = searchQuery.trim().length > 0;
 
@@ -143,7 +143,11 @@ function SearchComp() {
                 thumbnails" design mission for this route only. */}
             <div className="flex flex-col">
               {results.map((bookmark) => (
-                <DenseBookmarkRow key={bookmark.id} bookmark={bookmark} />
+                <DenseBookmarkRow
+                  key={bookmark.id}
+                  bookmark={bookmark}
+                  searchQuery={parsedSearchQuery.text}
+                />
               ))}
             </div>
             {hasNextPage && (
