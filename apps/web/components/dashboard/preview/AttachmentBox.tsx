@@ -101,7 +101,12 @@ export default function AttachmentBox({
   const hasAssets = bookmark.assets.length > 0;
 
   return (
-    <Collapsible defaultOpen={true}>
+    // Collapsed by default when there's an existing list to declutter — but
+    // not when it's empty: the trigger below only renders when `hasAssets`,
+    // so a collapsed empty box would have no way to open it. The upload
+    // buttons in the header stay reachable either way; only this list/
+    // placeholder-text body ever collapses.
+    <Collapsible defaultOpen={!hasAssets}>
       <div className="flex w-full items-center justify-between gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {t("common.attachments")}
         <div className="flex items-center gap-1">
