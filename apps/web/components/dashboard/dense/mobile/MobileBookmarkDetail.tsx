@@ -121,6 +121,10 @@ export function MobileBookmarkDetail({
   const progressRef = useRef<HTMLDivElement>(null);
 
   const title = bookmark ? getDenseRowTitle(bookmark) : null;
+  // Hoisted above the word-reveal effect below, which needs it to wrap the
+  // rebuilt title in a link — bookmark is still possibly null this early
+  // (before the spinner early-return further down), same as `title` above.
+  const sourceUrl = bookmark ? getSourceUrl(bookmark) : null;
 
   // Scroll-linked progress rule — design's own onScroll/gsap.to, verbatim.
   useEffect(() => {
@@ -146,10 +150,24 @@ export function MobileBookmarkDetail({
   // whenever the title text itself changes (id or re-summarised title),
   // not on every render: unrelated re-renders with the same string leave
   // the JSX-rendered text child alone, so there's nothing to re-split.
+  //
+  // This imperatively rebuilds the h1's entire content, replacing whatever
+  // JSX rendered there — including the "title links to source" treatment
+  // below, so that has to be recreated here too: the words get appended
+  // into a freshly created <a> instead of straight into `t` whenever there's
+  // a source to link to.
   useEffect(() => {
     const t = titleRef.current;
     if (!t || !title) return;
     t.textContent = "";
+    const container = sourceUrl
+      ? Object.assign(document.createElement("a"), {
+          href: sourceUrl,
+          target: "_blank",
+          rel: "noreferrer",
+          className: "text-k-fg hover:text-k-fg-soft hover:underline",
+        })
+      : t;
     const words = title.split(" ");
     words.forEach((w, i) => {
       const outer = document.createElement("span");
@@ -159,15 +177,16 @@ export function MobileBookmarkDetail({
       inner.style.display = "inline-block";
       inner.textContent = w + (i < words.length - 1 ? " " : "");
       outer.appendChild(inner);
-      t.appendChild(outer);
+      container.appendChild(outer);
     });
+    if (container !== t) t.appendChild(container);
     gsap.from(t.querySelectorAll("span > span"), {
       yPercent: 110,
       duration: 0.7,
       stagger: 0.04,
       ease: "power4.out",
     });
-  }, [title]);
+  }, [title, sourceUrl]);
 
   if (!bookmark) {
     return (
@@ -182,7 +201,6 @@ export function MobileBookmarkDetail({
     shouldDefaultOpenContentDisclosure(bookmark.content.type);
 
   const isOwner = session?.user?.id === bookmark.userId;
-  const sourceUrl = getSourceUrl(bookmark);
   const domain = sourceUrl ? getDomainFromUrl(sourceUrl) : null;
   const isPendingSummary = bookmark.summarizationStatus === "pending";
   const { lead, keyPoints, trail } = parseSummary(bookmark.summary);
@@ -274,9 +292,20 @@ export function MobileBookmarkDetail({
       >
         <h1
           ref={titleRef}
-          className="text-k-fg text-[24px] font-semibold leading-[1.22] tracking-[-0.025em] [text-wrap:pretty]"
+          className="text-[24px] font-semibold leading-[1.22] tracking-[-0.025em] [text-wrap:pretty]"
         >
-          {title}
+          {sourceUrl ? (
+            <a
+              href={sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="text-k-fg hover:text-k-fg-soft hover:underline"
+            >
+              {title}
+            </a>
+          ) : (
+            <span className="text-k-fg">{title}</span>
+          )}
         </h1>
 
         <div className="flex flex-wrap items-center gap-[9px] py-[12px] pb-[16px]">

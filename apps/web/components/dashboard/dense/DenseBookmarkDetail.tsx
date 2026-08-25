@@ -274,8 +274,19 @@ export default function DenseBookmarkDetail({
               {formatSavedAgo(bookmark.createdAt)}
               {readingMinutes && <> · {readingMinutes} min read</>}
             </p>
-            <h1 className="text-k-fg text-[25px] font-semibold leading-[1.22] tracking-[-0.025em] [text-wrap:pretty]">
-              {title}
+            <h1 className="text-[25px] font-semibold leading-[1.22] tracking-[-0.025em] [text-wrap:pretty]">
+              {sourceUrl ? (
+                <a
+                  href={sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-k-fg hover:text-k-fg-soft hover:underline"
+                >
+                  {title}
+                </a>
+              ) : (
+                <span className="text-k-fg">{title}</span>
+              )}
             </h1>
             {showOriginalTitle && (
               <div className="flex flex-wrap items-center gap-[7px]">
