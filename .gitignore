@@ -2,6 +2,10 @@
 
 # dependencies
 node_modules
+
+# faster-whisper ASR backend (CRAWLER_ASR_BACKEND=faster-whisper), a local
+# venv rather than a system-wide install — see apps/workers/scripts/asr-venv
+apps/workers/scripts/asr-venv
 .pnp
 .pnpm-store
 .pnp.js

@@ -156,8 +156,11 @@ const allEnv = z.object({
   //
   // A session cookie is a credential — it grants whatever the account can do,
   // and is not scoped to reading. Mount the file read-only, keep it 0600, and
-  // strongly prefer a throwaway account: platforms do rate-limit and
-  // action-block accounts they associate with automated fetching.
+  // use a disposable account made for this purpose — never a personal one.
+  // Platforms rate-limit and action-block accounts they associate with
+  // automated fetching, up to and including a suspension warning on the
+  // account whose cookies are used; this has happened in practice at
+  // ordinary crawl volumes, not just under heavy abuse.
   CRAWLER_YTDLP_COOKIES_FILE: z.string().optional(),
   // Alternative to the file: read cookies straight out of a local browser
   // profile, e.g. "firefox" or "chrome:Default". Needs the browser's profile
@@ -195,7 +198,22 @@ const allEnv = z.object({
   // configured, since it needs both binaries present and is far slower than
   // fetching captions.
   CRAWLER_ASR_ENABLED: stringBool("false"),
+  // whisper.cpp (a compiled binary + a .bin model file you provide) is the
+  // original backend. faster-whisper (CTranslate2, pip-installed, model
+  // names auto-downloaded on first use) measured ~3-4x faster on CPU in
+  // testing and needs no binary compilation, at the cost of a Python
+  // dependency instead of a C++ one — pick whichever is already available.
+  CRAWLER_ASR_BACKEND: z
+    .enum(["whispercpp", "faster-whisper"])
+    .default("whispercpp"),
   CRAWLER_ASR_BINARY: z.string().default("whisper-cli"),
+  // Only used for the faster-whisper backend. Left as "python3" — the plain
+  // interpreter on PATH — by default; point it at a venv's python if
+  // faster-whisper shouldn't be installed system-wide.
+  CRAWLER_ASR_PYTHON_BINARY: z.string().default("python3"),
+  // whisper.cpp: a path to a .bin model file. faster-whisper: a model name
+  // (e.g. "small", "base.en") that gets downloaded and cached on first use —
+  // there's no file to point at ahead of time.
   CRAWLER_ASR_MODEL: z.string().optional(),
   CRAWLER_ASR_LANGUAGE: z.string().default("auto"),
   CRAWLER_ASR_TIMEOUT_SEC: z.coerce.number().default(15 * 60),
@@ -476,7 +494,9 @@ const serverConfigSchema = allEnv.transform((val, ctx) => {
       videoTranscriptLangs: val.CRAWLER_VIDEO_TRANSCRIPT_LANGS,
       videoTranscriptMaxChars: val.CRAWLER_VIDEO_TRANSCRIPT_MAX_CHARS,
       asrEnabled: val.CRAWLER_ASR_ENABLED,
+      asrBackend: val.CRAWLER_ASR_BACKEND,
       asrBinary: val.CRAWLER_ASR_BINARY,
+      asrPythonBinary: val.CRAWLER_ASR_PYTHON_BINARY,
       asrModel: val.CRAWLER_ASR_MODEL,
       asrLanguage: val.CRAWLER_ASR_LANGUAGE,
       asrTimeoutSec: val.CRAWLER_ASR_TIMEOUT_SEC,

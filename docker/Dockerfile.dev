@@ -27,6 +27,12 @@ RUN apt-get update \
 # and site extractors (Instagram especially) break faster than that.
 RUN pip3 install --no-cache-dir --break-system-packages -U yt-dlp
 
+# faster-whisper: the ASR backend CRAWLER_ASR_BACKEND=faster-whisper shells
+# out to (via faster_whisper_cli.py). Measured ~3-4x faster than whisper.cpp
+# on CPU and needs no separate model file — it downloads and caches
+# CRAWLER_ASR_MODEL's model name itself on first use.
+RUN pip3 install --no-cache-dir --break-system-packages faster-whisper
+
 RUN corepack enable
 
 COPY . .

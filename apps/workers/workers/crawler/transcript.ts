@@ -1,6 +1,7 @@
 import fs from "fs";
 import * as os from "os";
 import path from "path";
+import { fileURLToPath } from "url";
 import { execa } from "execa";
 
 import serverConfig from "@karakeep/shared/config";
@@ -28,6 +29,13 @@ import { isAuthenticationFailure, ytDlpAuthArguments } from "./ytdlpAuth";
  */
 
 const TMP_FOLDER = path.join(os.tmpdir(), "transcripts");
+
+// Co-located with this file rather than resolved from cwd, so it's found
+// the same way whether tsx is running from the repo root, apps/workers, or
+// a Docker image's /app — anywhere this module itself gets loaded from.
+const FASTER_WHISPER_CLI = fileURLToPath(
+  new URL("./faster_whisper_cli.py", import.meta.url),
+);
 
 export type TranscriptSource = "captions" | "asr";
 
@@ -352,8 +360,15 @@ async function transcribeAudio(
   signal: AbortSignal | undefined,
   jobLabel: string,
 ): Promise<Transcript | null> {
-  const { asrEnabled, asrBinary, asrModel, asrLanguage, asrMaxDurationSec } =
-    serverConfig.crawler;
+  const {
+    asrEnabled,
+    asrBackend,
+    asrBinary,
+    asrPythonBinary,
+    asrModel,
+    asrLanguage,
+    asrMaxDurationSec,
+  } = serverConfig.crawler;
 
   if (!asrEnabled) return null;
   if (!asrModel) {
@@ -362,7 +377,10 @@ async function transcribeAudio(
     );
     return null;
   }
-  if (!fs.existsSync(asrModel)) {
+  // whisper.cpp's model is a .bin file that has to already be on disk.
+  // faster-whisper's is a model *name* ("small", "base.en", ...) that it
+  // downloads and caches itself on first use, so there's nothing to check.
+  if (asrBackend === "whispercpp" && !fs.existsSync(asrModel)) {
     logger.warn(
       `${jobLabel} ASR model "${asrModel}" does not exist. Skipping transcription.`,
     );
@@ -458,8 +476,16 @@ async function transcribeAudio(
       asrArgs.push("-l", asrLanguage);
     }
 
+    // Same argument shape either way — the faster-whisper backend is just
+    // that CLI's arguments run through a Python shim instead of the
+    // whisper.cpp binary directly, so this is the only branch point.
+    const [command, commandArgs] =
+      asrBackend === "faster-whisper"
+        ? [asrPythonBinary, [FASTER_WHISPER_CLI, ...asrArgs]]
+        : [asrBinary, asrArgs];
+
     try {
-      await execa(asrBinary, asrArgs, {
+      await execa(command, commandArgs, {
         cancelSignal: signal,
         timeout: serverConfig.crawler.asrTimeoutSec * 1000,
       });
@@ -467,7 +493,7 @@ async function transcribeAudio(
       const err = e as Error & { stderr?: string; code?: string };
       if (err.code === "ENOENT") {
         logger.warn(
-          `${jobLabel} ASR binary "${asrBinary}" not found on PATH. Skipping transcription.`,
+          `${jobLabel} ASR command "${command}" not found on PATH. Skipping transcription.`,
         );
         return null;
       }
@@ -489,7 +515,7 @@ async function transcribeAudio(
     if (!text) return null;
 
     logger.info(
-      `${jobLabel} Transcribed ${text.length} chars of audio via ${asrBinary}.`,
+      `${jobLabel} Transcribed ${text.length} chars of audio via ${asrBackend}.`,
     );
     return { text, source: "asr" };
   } finally {

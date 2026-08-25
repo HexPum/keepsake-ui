@@ -11,6 +11,11 @@ Only instagram.com cookies are written. The crawler needs nothing else, and a
 file containing every session in the browser is a much worse thing to leave
 lying on disk than one containing a single site's.
 
+Log Chrome into a disposable Instagram account before running this — never
+your personal one. Whatever account is logged in when this runs is the one
+that takes the rate-limit/action-block risk from automated fetching, up to
+and including a suspension warning at ordinary crawl volumes.
+
 Run it with yt-dlp's own interpreter, which has the yt_dlp package:
 
     $(brew --prefix yt-dlp)/libexec/bin/python3 docker/export-ig-cookies.py
