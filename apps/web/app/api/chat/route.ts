@@ -10,8 +10,11 @@ import {
 } from "@/server/api/client";
 import { z } from "zod";
 
+import { db } from "@karakeep/db";
+import { AIProviderConfigService } from "@karakeep/shared-server";
 import { streamChatCompletion } from "@karakeep/shared/chatInference";
 import serverConfig from "@karakeep/shared/config";
+import { resolveEffectiveInferenceConfig } from "@karakeep/shared/inference";
 import { constructChatPrompt } from "@karakeep/shared/prompts";
 import { stripSummaryMarkers } from "@karakeep/shared/summaryMarkers";
 import { ZBookmark } from "@karakeep/shared/types/bookmarks";
@@ -147,7 +150,12 @@ export async function POST(request: NextRequest) {
   if (!serverConfig.chat.enabled) {
     return Response.json({ error: "Chat is not enabled" }, { status: 404 });
   }
-  if (!serverConfig.inference.isConfigured) {
+  // Not serverConfig.inference.isConfigured (env-only) — an admin-saved
+  // provider override (Settings → AI) can configure inference without
+  // either env var ever being set. See resolveEffectiveInferenceConfig.
+  const providerOverride = await AIProviderConfigService.get(db);
+  const effectiveInference = resolveEffectiveInferenceConfig(providerOverride);
+  if (!effectiveInference.openAIApiKey && !effectiveInference.ollamaBaseUrl) {
     return Response.json(
       { error: "No AI provider is configured on the server" },
       { status: 503 },
@@ -185,7 +193,10 @@ export async function POST(request: NextRequest) {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        for await (const delta of streamChatCompletion(prompt)) {
+        for await (const delta of streamChatCompletion(
+          prompt,
+          providerOverride,
+        )) {
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`),
           );

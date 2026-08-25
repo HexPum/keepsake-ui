@@ -7,6 +7,62 @@ import { z } from "zod";
 import serverConfig from "./config";
 import { customFetch } from "./customFetch";
 import logger from "./logger";
+import { AIProviderOverride } from "./types/aiProviderConfig";
+
+/**
+ * The .env-derived defaults (packages/shared/config.ts), overridden field by
+ * field by an admin-saved AIProviderOverride (packages/shared/types/
+ * aiProviderConfig.ts) if one is active. `openAIApiKey`/`ollamaBaseUrl` are
+ * deliberately forced to `undefined` on whichever branch isn't the chosen
+ * `activeProvider` — the same "presence decides the provider" logic
+ * InferenceClientFactory.build/streamChatCompletion already use, so an
+ * explicit choice always wins over auto-detection even if both env vars
+ * happen to be set.
+ */
+export interface EffectiveInferenceConfig {
+  openAIApiKey?: string;
+  openAIBaseUrl?: string;
+  ollamaBaseUrl?: string;
+  textModel: string;
+  imageModel: string;
+  chatModel: string;
+}
+
+export function resolveEffectiveInferenceConfig(
+  override?: AIProviderOverride | null,
+): EffectiveInferenceConfig {
+  const base: EffectiveInferenceConfig = {
+    openAIApiKey: serverConfig.inference.openAIApiKey,
+    openAIBaseUrl: serverConfig.inference.openAIBaseUrl,
+    ollamaBaseUrl: serverConfig.inference.ollamaBaseUrl,
+    textModel: serverConfig.inference.textModel,
+    imageModel: serverConfig.inference.imageModel,
+    chatModel: serverConfig.inference.chatModel,
+  };
+  if (!override?.activeProvider) {
+    return base;
+  }
+  if (override.activeProvider === "openai") {
+    const openai = override.openai ?? {};
+    return {
+      openAIApiKey: openai.apiKey ?? base.openAIApiKey,
+      openAIBaseUrl: openai.baseUrl ?? base.openAIBaseUrl,
+      ollamaBaseUrl: undefined,
+      textModel: openai.textModel ?? base.textModel,
+      imageModel: openai.imageModel ?? base.imageModel,
+      chatModel: openai.chatModel ?? base.chatModel,
+    };
+  }
+  const ollama = override.ollama ?? {};
+  return {
+    openAIApiKey: undefined,
+    openAIBaseUrl: base.openAIBaseUrl,
+    ollamaBaseUrl: ollama.baseUrl ?? base.ollamaBaseUrl,
+    textModel: ollama.textModel ?? base.textModel,
+    imageModel: ollama.imageModel ?? base.imageModel,
+    chatModel: ollama.chatModel ?? base.chatModel,
+  };
+}
 
 export interface InferenceResponse {
   response: string;
@@ -206,13 +262,19 @@ const buildOpenAIClient = (config: OpenAIEmbeddingConfig) =>
   });
 
 export class InferenceClientFactory {
-  static build(): InferenceClient | null {
-    if (serverConfig.inference.openAIApiKey) {
-      return OpenAIInferenceClient.fromConfig();
+  /** `override` is the DB-saved AIProviderOverride, if any — see
+   *  resolveEffectiveInferenceConfig above. Callers with DB access
+   *  (AIProviderConfigService.get) pass it in; omitting it (as every
+   *  caller did before this feature existed) is identical to passing
+   *  `null` — pure .env behaviour. */
+  static build(override?: AIProviderOverride | null): InferenceClient | null {
+    const effective = resolveEffectiveInferenceConfig(override);
+    if (effective.openAIApiKey) {
+      return OpenAIInferenceClient.fromConfig(effective);
     }
 
-    if (serverConfig.inference.ollamaBaseUrl) {
-      return OllamaInferenceClient.fromConfig();
+    if (effective.ollamaBaseUrl) {
+      return OllamaInferenceClient.fromConfig(effective);
     }
     return null;
   }
@@ -284,15 +346,22 @@ export class OpenAIInferenceClient implements InferenceClient {
     this.openAI = buildOpenAIClient(config);
   }
 
-  static fromConfig(): OpenAIInferenceClient {
+  /** `effective` supplies the fields an AIProviderOverride can change
+   *  (key/baseURL/models); everything else (timeouts, service tier,
+   *  context length, output schema, reasoning effort) stays .env-only —
+   *  those are advanced/rarely-changed knobs, not part of the admin
+   *  provider-switch UI. */
+  static fromConfig(
+    effective: EffectiveInferenceConfig,
+  ): OpenAIInferenceClient {
     return new OpenAIInferenceClient({
-      apiKey: serverConfig.inference.openAIApiKey!,
-      baseURL: serverConfig.inference.openAIBaseUrl,
+      apiKey: effective.openAIApiKey!,
+      baseURL: effective.openAIBaseUrl,
       proxyUrl: serverConfig.inference.openAIProxyUrl,
       timeoutSec: serverConfig.inference.openAITimeoutSec,
       serviceTier: serverConfig.inference.openAIServiceTier,
-      textModel: serverConfig.inference.textModel,
-      imageModel: serverConfig.inference.imageModel,
+      textModel: effective.textModel,
+      imageModel: effective.imageModel,
       contextLength: serverConfig.inference.contextLength,
       maxOutputTokens: serverConfig.inference.maxOutputTokens,
       useMaxCompletionTokens: serverConfig.inference.useMaxCompletionTokens,
@@ -431,11 +500,13 @@ class OllamaInferenceClient implements InferenceClient {
     });
   }
 
-  static fromConfig(): OllamaInferenceClient {
+  static fromConfig(
+    effective: EffectiveInferenceConfig,
+  ): OllamaInferenceClient {
     return new OllamaInferenceClient({
-      baseUrl: serverConfig.inference.ollamaBaseUrl!,
-      textModel: serverConfig.inference.textModel,
-      imageModel: serverConfig.inference.imageModel,
+      baseUrl: effective.ollamaBaseUrl!,
+      textModel: effective.textModel,
+      imageModel: effective.imageModel,
       contextLength: serverConfig.inference.contextLength,
       maxOutputTokens: serverConfig.inference.maxOutputTokens,
       keepAlive: serverConfig.inference.ollamaKeepAlive,

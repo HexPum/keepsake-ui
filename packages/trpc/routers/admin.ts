@@ -13,6 +13,7 @@ import {
 } from "@karakeep/db/schema";
 import {
   AdminMaintenanceQueue,
+  AIProviderConfigService,
   AssetPreprocessingQueue,
   buildCrawlIdempotencyKey,
   EmbeddingsQueue,
@@ -28,9 +29,15 @@ import {
   zAdminMaintenanceTaskSchema,
 } from "@karakeep/shared-server";
 import serverConfig from "@karakeep/shared/config";
+import { resolveEffectiveInferenceConfig } from "@karakeep/shared/inference";
 import logger from "@karakeep/shared/logger";
 import { PluginManager, PluginType } from "@karakeep/shared/plugins";
 import { getSearchClient } from "@karakeep/shared/search";
+import {
+  zAIProviderOverrideRedactedSchema,
+  zAIProviderOverrideSchema,
+  zEffectiveInferenceConfigSchema,
+} from "@karakeep/shared/types/aiProviderConfig";
 import {
   resetPasswordSchema,
   updateUserSchema,
@@ -997,6 +1004,49 @@ export const adminAppRouter = router({
 
       await syncStripeDataToDatabase(subscription.stripeCustomerId, ctx.db);
 
+      return { success: true };
+    }),
+
+  // Provider/model override for AI inference (summary + chat) — see
+  // AIProviderConfigService and packages/shared/types/aiProviderConfig.ts.
+  // `system`-scoped like the rest of this file's server-wide settings.
+  getAIProviderConfig: adminSystemProcedure
+    .output(
+      z.object({
+        override: zAIProviderOverrideRedactedSchema,
+        effective: zEffectiveInferenceConfigSchema,
+      }),
+    )
+    .query(async ({ ctx }) => {
+      const [override, savedOverride] = await Promise.all([
+        AIProviderConfigService.getRedacted(ctx.db),
+        AIProviderConfigService.get(ctx.db),
+      ]);
+      const effectiveConfig = resolveEffectiveInferenceConfig(savedOverride);
+      return {
+        override,
+        effective: {
+          provider: effectiveConfig.openAIApiKey
+            ? "openai"
+            : effectiveConfig.ollamaBaseUrl
+              ? "ollama"
+              : null,
+          textModel: effectiveConfig.textModel,
+          imageModel: effectiveConfig.imageModel,
+          chatModel: effectiveConfig.chatModel,
+        },
+      };
+    }),
+
+  setAIProviderConfig: adminSystemProcedure
+    // openaiApiKey is already optional on this schema — the form only
+    // sends a new key when the admin actually typed one into the masked
+    // field. See AIProviderConfigService.set for what omitting it (vs.
+    // sending "") does.
+    .input(zAIProviderOverrideSchema)
+    .output(z.object({ success: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      await AIProviderConfigService.set(ctx.db, input);
       return { success: true };
     }),
 });

@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-import { OpenAIInferenceClient } from "./inference";
+import serverConfig from "./config";
+import {
+  OpenAIInferenceClient,
+  resolveEffectiveInferenceConfig,
+} from "./inference";
 import type { OpenAIInferenceConfig } from "./inference";
 
 const capturedBodies: Record<string, unknown>[] = [];
@@ -90,5 +94,91 @@ describe("OpenAIInferenceClient response_format", () => {
       type: "json_schema",
       json_schema: { name: "schema" },
     });
+  });
+});
+
+describe("resolveEffectiveInferenceConfig", () => {
+  it("returns the .env-derived defaults when no override is given", () => {
+    expect(resolveEffectiveInferenceConfig(null)).toEqual({
+      openAIApiKey: serverConfig.inference.openAIApiKey,
+      openAIBaseUrl: serverConfig.inference.openAIBaseUrl,
+      ollamaBaseUrl: serverConfig.inference.ollamaBaseUrl,
+      textModel: serverConfig.inference.textModel,
+      imageModel: serverConfig.inference.imageModel,
+      chatModel: serverConfig.inference.chatModel,
+    });
+    expect(resolveEffectiveInferenceConfig(undefined)).toEqual(
+      resolveEffectiveInferenceConfig(null),
+    );
+  });
+
+  it("returns the .env-derived defaults when activeProvider is null, ignoring any stray fields", () => {
+    const effective = resolveEffectiveInferenceConfig({
+      activeProvider: null,
+      openai: { apiKey: "should-be-ignored" },
+    });
+    expect(effective).toEqual(resolveEffectiveInferenceConfig(null));
+  });
+
+  it("uses every openai override field, forcing ollamaBaseUrl unset, when active", () => {
+    const effective = resolveEffectiveInferenceConfig({
+      activeProvider: "openai",
+      openai: {
+        apiKey: "override-key",
+        baseUrl: "https://override.example/v1",
+        textModel: "override-text",
+        imageModel: "override-image",
+        chatModel: "override-chat",
+      },
+    });
+    expect(effective).toEqual({
+      openAIApiKey: "override-key",
+      openAIBaseUrl: "https://override.example/v1",
+      ollamaBaseUrl: undefined,
+      textModel: "override-text",
+      imageModel: "override-image",
+      chatModel: "override-chat",
+    });
+  });
+
+  it("falls back to .env for any openai field the override leaves unset", () => {
+    const effective = resolveEffectiveInferenceConfig({
+      activeProvider: "openai",
+      openai: { apiKey: "override-key" },
+    });
+    expect(effective.openAIApiKey).toBe("override-key");
+    expect(effective.openAIBaseUrl).toBe(serverConfig.inference.openAIBaseUrl);
+    expect(effective.textModel).toBe(serverConfig.inference.textModel);
+    expect(effective.imageModel).toBe(serverConfig.inference.imageModel);
+    expect(effective.chatModel).toBe(serverConfig.inference.chatModel);
+  });
+
+  it("uses every ollama override field, forcing openAIApiKey unset, when active", () => {
+    const effective = resolveEffectiveInferenceConfig({
+      activeProvider: "ollama",
+      ollama: {
+        baseUrl: "http://localhost:11434",
+        textModel: "llama3",
+        imageModel: "llava",
+        chatModel: "llama3-chat",
+      },
+    });
+    expect(effective).toEqual({
+      openAIApiKey: undefined,
+      openAIBaseUrl: serverConfig.inference.openAIBaseUrl,
+      ollamaBaseUrl: "http://localhost:11434",
+      textModel: "llama3",
+      imageModel: "llava",
+      chatModel: "llama3-chat",
+    });
+  });
+
+  it("forces the chosen provider even if the other provider's .env var is also set — explicit choice wins over auto-detection", () => {
+    const effective = resolveEffectiveInferenceConfig({
+      activeProvider: "ollama",
+      ollama: { baseUrl: "http://localhost:11434" },
+    });
+    expect(effective.openAIApiKey).toBeUndefined();
+    expect(effective.ollamaBaseUrl).toBe("http://localhost:11434");
   });
 });

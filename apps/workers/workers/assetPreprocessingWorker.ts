@@ -16,6 +16,7 @@ import {
 } from "@karakeep/db/schema";
 import {
   addLogFields,
+  AIProviderConfigService,
   AssetPreprocessingQueue,
   EmbeddingsQueue,
   OpenAIQueue,
@@ -139,7 +140,8 @@ async function readImageTextWithLLM(
   buffer: Buffer,
   contentType: string,
 ): Promise<string | null> {
-  const inferenceClient = InferenceClientFactory.build();
+  const providerOverride = await AIProviderConfigService.get(db);
+  const inferenceClient = InferenceClientFactory.build(providerOverride);
   if (!inferenceClient) {
     logger.warn(
       "[assetPreprocessing] LLM OCR is enabled but no inference client is configured. Falling back to Tesseract.",

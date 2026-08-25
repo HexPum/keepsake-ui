@@ -657,4 +657,90 @@ describe("Admin Routes", () => {
       );
     });
   });
+
+  describe("AI provider config", () => {
+    async function getAdminApi(db: CustomTestContext["db"]) {
+      const [adminUser] = await db
+        .insert(users)
+        .values({
+          name: "Admin User",
+          email: "ai-provider-config-admin@test.com",
+          role: "admin",
+        })
+        .returning();
+      return getApiCaller(db, adminUser.id, adminUser.email, "admin").admin;
+    }
+
+    test<CustomTestContext>("defaults to no override, falling back to .env", async ({
+      db,
+    }) => {
+      const adminApi = await getAdminApi(db);
+      const result = await adminApi.getAIProviderConfig();
+      expect(result.override.activeProvider).toBeNull();
+      expect(result.override.openai).toBeUndefined();
+      expect(result.override.ollama).toBeUndefined();
+    });
+
+    test<CustomTestContext>("saves and echoes back a provider override, without the raw API key", async ({
+      db,
+    }) => {
+      const adminApi = await getAdminApi(db);
+
+      await adminApi.setAIProviderConfig({
+        activeProvider: "ollama",
+        ollama: { baseUrl: "http://localhost:11434", textModel: "llama3" },
+      });
+
+      const result = await adminApi.getAIProviderConfig();
+      expect(result.override.activeProvider).toBe("ollama");
+      expect(result.override.ollama).toEqual({
+        baseUrl: "http://localhost:11434",
+        textModel: "llama3",
+      });
+      expect(result.effective.provider).toBe("ollama");
+      expect(result.effective.textModel).toBe("llama3");
+    });
+
+    test<CustomTestContext>("omitting the API key on a later save keeps the previously saved one, exposed only as a hint", async ({
+      db,
+    }) => {
+      const adminApi = await getAdminApi(db);
+
+      await adminApi.setAIProviderConfig({
+        activeProvider: "openai",
+        openai: { apiKey: "sk-secret1234", textModel: "gpt-x" },
+      });
+      // Second save doesn't include openai.apiKey at all — simulates the
+      // settings form re-submitting the rest of the fields unchanged
+      // without the admin having typed a new key.
+      await adminApi.setAIProviderConfig({
+        activeProvider: "openai",
+        openai: { textModel: "gpt-y" },
+      });
+
+      const result = await adminApi.getAIProviderConfig();
+      expect(result.override.openai?.textModel).toBe("gpt-y");
+      expect(result.override.openai?.apiKeyHint).toBe("1234");
+      // The redacted shape has no field the raw key could leak through.
+      expect(result.override.openai).not.toHaveProperty("apiKey");
+    });
+
+    test<CustomTestContext>("an explicit empty-string API key clears the saved one", async ({
+      db,
+    }) => {
+      const adminApi = await getAdminApi(db);
+
+      await adminApi.setAIProviderConfig({
+        activeProvider: "openai",
+        openai: { apiKey: "sk-secret1234" },
+      });
+      await adminApi.setAIProviderConfig({
+        activeProvider: "openai",
+        openai: { apiKey: "" },
+      });
+
+      const result = await adminApi.getAIProviderConfig();
+      expect(result.override.openai?.apiKeyHint).toBeNull();
+    });
+  });
 });

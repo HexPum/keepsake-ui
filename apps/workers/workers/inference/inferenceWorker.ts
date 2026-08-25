@@ -7,6 +7,7 @@ import { db } from "@karakeep/db";
 import { bookmarks } from "@karakeep/db/schema";
 import {
   addLogFields,
+  AIProviderConfigService,
   OpenAIQueue,
   zOpenAIRequestSchema,
 } from "@karakeep/shared-server";
@@ -107,7 +108,8 @@ async function runOpenAI(
 ): Promise<InferenceOutcome> {
   const jobId = job.id;
 
-  const inferenceClient = InferenceClientFactory.build();
+  const providerOverride = await AIProviderConfigService.get(db);
+  const inferenceClient = InferenceClientFactory.build(providerOverride);
   if (!inferenceClient) {
     logger.debug(
       `[inference][${jobId}] No inference client configured, nothing to do now`,

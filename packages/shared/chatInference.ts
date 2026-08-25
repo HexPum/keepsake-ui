@@ -4,6 +4,11 @@ import * as undici from "undici";
 
 import serverConfig from "./config";
 import { customFetch } from "./customFetch";
+import {
+  EffectiveInferenceConfig,
+  resolveEffectiveInferenceConfig,
+} from "./inference";
+import { AIProviderOverride } from "./types/aiProviderConfig";
 
 /**
  * A minimal, streaming-only sibling to `InferenceClient` in `./inference.ts`.
@@ -12,29 +17,35 @@ import { customFetch } from "./customFetch";
  * purely additive, so it can't conflict when syncing with upstream, whereas
  * `inference.ts` is actively maintained upstream for tagging/summarization.
  *
- * Provider selection mirrors `InferenceClientFactory.build()`, and the model
- * used is `serverConfig.inference.chatModel` — already-defined config
- * (`CHAT_MODEL` env var, falling back to `textModel`) with no consumers
- * before this, so no new configuration surface is introduced.
+ * Provider/model selection goes through the same
+ * resolveEffectiveInferenceConfig merge InferenceClientFactory.build uses —
+ * `override` is the DB-saved AIProviderOverride, if any; omitting it is
+ * identical to passing `null` (pure .env behaviour, as before this feature
+ * existed).
  */
 export async function* streamChatCompletion(
   prompt: string,
+  override?: AIProviderOverride | null,
 ): AsyncGenerator<string> {
-  if (serverConfig.inference.openAIApiKey) {
-    yield* streamFromOpenAI(prompt);
+  const effective = resolveEffectiveInferenceConfig(override);
+  if (effective.openAIApiKey) {
+    yield* streamFromOpenAI(prompt, effective);
     return;
   }
-  if (serverConfig.inference.ollamaBaseUrl) {
-    yield* streamFromOllama(prompt);
+  if (effective.ollamaBaseUrl) {
+    yield* streamFromOllama(prompt, effective);
     return;
   }
   throw new Error("No inference provider configured (OpenAI or Ollama)");
 }
 
-async function* streamFromOpenAI(prompt: string): AsyncGenerator<string> {
+async function* streamFromOpenAI(
+  prompt: string,
+  effective: EffectiveInferenceConfig,
+): AsyncGenerator<string> {
   const openAI = new OpenAI({
-    apiKey: serverConfig.inference.openAIApiKey,
-    baseURL: serverConfig.inference.openAIBaseUrl,
+    apiKey: effective.openAIApiKey,
+    baseURL: effective.openAIBaseUrl,
     timeout:
       serverConfig.inference.openAITimeoutSec !== undefined
         ? serverConfig.inference.openAITimeoutSec * 1000
@@ -53,7 +64,7 @@ async function* streamFromOpenAI(prompt: string): AsyncGenerator<string> {
   });
 
   const stream = await openAI.chat.completions.create({
-    model: serverConfig.inference.chatModel,
+    model: effective.chatModel,
     messages: [{ role: "user", content: prompt }],
     stream: true,
   });
@@ -66,14 +77,17 @@ async function* streamFromOpenAI(prompt: string): AsyncGenerator<string> {
   }
 }
 
-async function* streamFromOllama(prompt: string): AsyncGenerator<string> {
+async function* streamFromOllama(
+  prompt: string,
+  effective: EffectiveInferenceConfig,
+): AsyncGenerator<string> {
   const ollama = new Ollama({
-    host: serverConfig.inference.ollamaBaseUrl,
+    host: effective.ollamaBaseUrl,
     fetch: customFetch,
   });
 
   const stream = await ollama.generate({
-    model: serverConfig.inference.chatModel,
+    model: effective.chatModel,
     prompt,
     stream: true,
     keep_alive: serverConfig.inference.ollamaKeepAlive,
