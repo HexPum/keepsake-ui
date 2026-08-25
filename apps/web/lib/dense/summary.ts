@@ -6,6 +6,8 @@
  * block entirely when it didn't.
  */
 
+import { stripSummaryMarkers } from "@karakeep/shared/summaryMarkers";
+
 const BULLET = /^\s*(?:[-*•–—]|\d+[.)])\s+(.*)$/;
 
 export interface ParsedSummary {
@@ -59,6 +61,10 @@ export function parseSummary(
  * for a bulleted block, and rendering the raw markdown there leaks "- " into
  * the middle of the sentence, so use the lead paragraph and fall back to
  * running the points together when the summary is nothing but a list.
+ *
+ * Also strips the caption/transcript source markers (see summaryMarkers.ts)
+ * that a video summary may contain — this is the row/card/search-home
+ * preview, not the one detail view that renders those as coloured spans.
  */
 export function summaryPreview(
   summary: string | null | undefined,
@@ -66,7 +72,9 @@ export function summaryPreview(
   // No `trail` case: parseSummary only leaves `lead` empty when it found a
   // list, so the join below always covers it.
   const { lead, keyPoints } = parseSummary(summary);
-  if (lead) return lead;
-  if (keyPoints.length > 0) return keyPoints.join(" · ");
+  if (lead) return stripSummaryMarkers(lead);
+  if (keyPoints.length > 0) {
+    return keyPoints.map((p) => stripSummaryMarkers(p)).join(" · ");
+  }
   return null;
 }

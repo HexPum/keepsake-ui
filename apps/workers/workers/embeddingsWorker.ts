@@ -19,6 +19,7 @@ import {
   DequeuedJobError,
   getQueueClient,
 } from "@karakeep/shared/queueing";
+import { stripSummaryMarkers } from "@karakeep/shared/summaryMarkers";
 import {
   BookmarkVectorDocument,
   getVectorStoreClient,
@@ -266,7 +267,10 @@ async function buildEmbeddingText(
     parts.push(`Tags: ${tags.join(", ")}`);
   }
 
-  appendProfileField(parts, "Summary", bookmark.summary);
+  // Strip caption/transcript source markers (see summaryMarkers.ts) — the
+  // embedding should represent the summary's actual content, not this
+  // fork's internal UI markup for a video summary.
+  appendProfileField(parts, "Summary", stripSummaryMarkers(bookmark.summary));
   appendProfileField(parts, "Note", bookmark.note);
 
   let rawContent: string | null = null;

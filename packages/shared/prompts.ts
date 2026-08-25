@@ -107,6 +107,44 @@ ${customPrompts && customPrompts.map((p) => `- ${p}`).join("\n")}
 }
 
 /**
+ * Title + summary for a video link with a transcript. Kept separate from
+ * constructSummaryPrompt (used for every other bookmark, plus previews in
+ * AISettings.tsx and the untruncated variant below) rather than adding a
+ * mode flag there, so this stays scoped to the one caller that has both a
+ * transcript and a caption to reconcile: summarize.ts's transcript branch.
+ *
+ * A video's caption (its title, description, and page metadata) and its
+ * transcript (what's actually said) carry different kinds of information —
+ * the caption is often the richer text, the transcript is what the video
+ * itself adds. Asking for one free-form summary let the caption dominate
+ * outright, so this asks for structured JSON with explicit ordering instead:
+ * the title favours the transcript (it's what's actually in the video, not
+ * just a repeat of the caption), the summary leads with the caption's point
+ * and then covers what the transcript adds.
+ *
+ * The summary is also asked to wrap each of its own sentences in an inline
+ * source marker (⟦caption⟧.../⟦transcript⟧..., see summaryMarkers.ts) so the
+ * dashboard preview can colour which claim came from where. These are
+ * stripped everywhere the summary is read other than that one component —
+ * this prompt is the only place that needs to know the marker syntax exists.
+ */
+export function constructVideoSummaryPrompt(
+  lang: string,
+  customPrompts: string[],
+  content: string,
+): string {
+  return `
+You are summarising a short video (e.g. a Reel or TikTok) from its caption and its spoken-audio transcript, given below. Respond ONLY with a JSON object of the shape {"title": string, "summary": string}. You MUST follow these rules:
+- "title": a short, specific title (under 12 words) for what the video actually shows or says. Base it mainly on the transcript — what's actually said or shown — using the caption only for supporting context, not as the source to copy. Do not just truncate or restate the caption.
+- "summary": 3-4 sentences. Open with the caption's own point (it's often the richer, more deliberate text), then cover what the transcript adds — what's actually said in the video, beyond the caption.
+- Wrap every sentence of the summary (or clause, if one sentence genuinely blends both sources) in a source marker: ⟦caption⟧...⟦/caption⟧ around anything drawn from the caption/title/description, ⟦transcript⟧...⟦/transcript⟧ around anything drawn from the transcript. Every part of the summary must be inside exactly one marker pair — nothing left unwrapped, nothing double-wrapped. Keep the words "caption" and "transcript" inside these markers in English exactly as shown, even when ${lang} is not English — only the sentence text itself is in ${lang}.
+- Both the title and the summary's sentence text must be in ${lang}.
+- Respond with nothing but the JSON object: no markdown fences, no commentary.
+${customPrompts && customPrompts.map((p) => `- ${p}`).join("\n")}
+    ${content}`;
+}
+
+/**
  * Build text tagging prompt without truncation (for previews/UI)
  */
 export function buildTextPromptUntruncated(

@@ -39,6 +39,7 @@ import { useForm } from "react-hook-form";
 
 import { useUpdateBookmark } from "@karakeep/shared-react/hooks/bookmarks";
 import { useTRPC } from "@karakeep/shared-react/trpc";
+import { stripSummaryMarkers } from "@karakeep/shared/summaryMarkers";
 import {
   BookmarkTypes,
   ZBookmark,
@@ -256,7 +257,15 @@ export function EditBookmarkDialog({
                       <Textarea
                         placeholder="Bookmark summary"
                         {...field}
-                        value={field.value ?? ""}
+                        // Display-only: a video summary's raw field.value may
+                        // carry caption/transcript source markers (see
+                        // summaryMarkers.ts). Stripping only what's shown —
+                        // not field.value itself — means an untouched save
+                        // still submits the pristine raw text with its
+                        // markers intact; only an actual edit here (which
+                        // updates field.value through onChange, already
+                        // marker-free) replaces it.
+                        value={stripSummaryMarkers(field.value) ?? ""}
                       />
                     </FormControl>
                     <FormMessage />

@@ -6,6 +6,7 @@ import {
   ArchivedActionIcon,
   FavouritedActionIcon,
 } from "@/components/dashboard/bookmarks/icons";
+import { SummaryAspectText } from "@/components/dashboard/dense/SummaryAspectText";
 import { AssetContentSection } from "@/components/dashboard/preview/AssetContentSection";
 import AttachmentBox from "@/components/dashboard/preview/AttachmentBox";
 import HighlightsBox from "@/components/dashboard/preview/HighlightsBox";
@@ -313,7 +314,7 @@ export default function DenseBookmarkDetail({
                 style={DETAIL_SUMMARY_STYLE}
                 className="text-k-summary-strong whitespace-pre-line [text-wrap:pretty]"
               >
-                {lead}
+                <SummaryAspectText text={lead} />
               </p>
             ) : (
               <p style={DETAIL_SUMMARY_STYLE} className="text-k-fg-dim">
@@ -331,7 +332,9 @@ export default function DenseBookmarkDetail({
                     <span className="text-k-accent flex-none" aria-hidden>
                       —
                     </span>
-                    <span>{point}</span>
+                    <span>
+                      <SummaryAspectText text={point} />
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -340,7 +343,7 @@ export default function DenseBookmarkDetail({
                   style={DETAIL_SUMMARY_STYLE}
                   className="text-k-summary-strong whitespace-pre-line [text-wrap:pretty]"
                 >
-                  {trail}
+                  <SummaryAspectText text={trail} />
                 </p>
               )}
             </div>

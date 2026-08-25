@@ -18,6 +18,7 @@ import {
   getSearchClient,
   SearchIndexClient,
 } from "@karakeep/shared/search";
+import { stripSummaryMarkers } from "@karakeep/shared/summaryMarkers";
 import { Bookmark } from "@karakeep/trpc/models/bookmarks";
 
 export class SearchIndexingWorker {
@@ -112,7 +113,9 @@ async function runIndex(
       : {}),
     ...(bookmark.text ? { content: bookmark.text.text } : {}),
     note: bookmark.note,
-    summary: bookmark.summary,
+    // Strip caption/transcript source markers (see summaryMarkers.ts) so
+    // they don't pollute match quality on a video bookmark's search text.
+    summary: stripSummaryMarkers(bookmark.summary),
     title: bookmark.title,
     createdAt: bookmark.createdAt.toISOString(),
     tags: bookmark.tagsOnBookmarks.map((t) => t.tag.name),

@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getBookmarkDomain } from "network";
+import { z } from "zod";
 
 import { db } from "@karakeep/db";
 import { bookmarks, customPrompts, users } from "@karakeep/db/schema";
@@ -12,12 +13,26 @@ import {
 import serverConfig from "@karakeep/shared/config";
 import { InferenceClient } from "@karakeep/shared/inference";
 import logger from "@karakeep/shared/logger";
-import { buildSummaryPrompt } from "@karakeep/shared/prompts.server";
+import {
+  buildSummaryPrompt,
+  buildVideoSummaryPrompt,
+} from "@karakeep/shared/prompts.server";
 import { DequeuedJob } from "@karakeep/shared/queueing";
 import { BookmarkTypes } from "@karakeep/shared/types/bookmarks";
 import { Bookmark } from "@karakeep/trpc/models/bookmarks";
 
 import type { InferenceOutcome } from "./inferenceWorker";
+import { parseJsonFromLLMResponse } from "./llmJson";
+
+/**
+ * Title + summary for a video with a transcript — see
+ * constructVideoSummaryPrompt for why this needs structured output instead
+ * of the free-form text every other bookmark gets.
+ */
+const videoSummarySchema = z.object({
+  title: z.string(),
+  summary: z.string(),
+});
 
 async function fetchBookmarkDetailsForSummary(bookmarkId: string) {
   const bookmark = await db.query.bookmarks.findFirst({
@@ -98,6 +113,10 @@ export async function runSummarization(
   }
 
   let textToSummarize = "";
+  // Set inside the branch below when the bookmark is a video with a
+  // transcript — read afterwards to pick the prompt/schema/DB write that
+  // also produces a title, not just a summary.
+  let isVideoWithTranscript = false;
   if (bookmarkData.type === BookmarkTypes.LINK && bookmarkData.link) {
     const link = bookmarkData.link;
 
@@ -114,26 +133,31 @@ export async function runSummarization(
       return "skipped";
     }
 
-    // A transcript is the *only* real signal a video link carries. The crawled
-    // page for one is empty HTML plus a site-wide boilerplate description —
-    // summarising that yields a description of YouTube rather than of the
-    // video — so when a transcript exists it leads, and the page metadata is
-    // demoted to context. Labelled with its provenance because ASR output is
-    // noisier than a real subtitle track and the model should weigh it as
-    // such.
-    if (link.transcript) {
+    // A transcript is the *only* signal a video link carries that the caption
+    // doesn't already give it — the crawled page is empty HTML plus a
+    // site-wide boilerplate description, so there's nothing else worth
+    // adding. Caption/title/description stay in, though: on Instagram in
+    // particular the page's own <title> *is* the caption, and it's often the
+    // richer, more deliberate text — a summary built from the transcript
+    // alone undersells what the caption already says clearly. Labelled with
+    // its provenance because ASR output is noisier than a real subtitle
+    // track and the model should weigh it as such.
+    isVideoWithTranscript = !!link.transcript;
+    if (isVideoWithTranscript) {
       const sourceLabel =
         link.transcriptSource === "asr"
           ? "auto-transcribed from the audio, may contain recognition errors"
           : "from the video's own subtitle track";
       textToSummarize = `
 Title: ${link.title ?? ""}
+Description: ${link.description ?? ""}
 Publisher: ${link.publisher ?? ""}
 Author: ${link.author ?? ""}
 URL: ${link.url ?? ""}
 
-The following is the transcript of the linked video (${sourceLabel}). Summarise
-what the video actually says, not the page it is hosted on.
+The following is the transcript of the linked video (${sourceLabel}) — what is
+actually said or shown in the video itself, as opposed to the caption/title
+above.
 
 Transcript: ${link.transcript}
 `;
@@ -175,19 +199,33 @@ URL: ${link.url ?? ""}
     "inference.prompt.custom_count": prompts.length,
   });
 
-  const summaryPrompt = await buildSummaryPrompt(
-    userSettings?.inferredTagLang ?? serverConfig.inference.inferredTagLang,
-    prompts.map((p) => p.text),
-    textToSummarize,
-    serverConfig.inference.contextLength,
-  );
+  const lang =
+    userSettings?.inferredTagLang ?? serverConfig.inference.inferredTagLang;
+  const customPromptTexts = prompts.map((p) => p.text);
+
+  const summaryPrompt = isVideoWithTranscript
+    ? await buildVideoSummaryPrompt(
+        lang,
+        customPromptTexts,
+        textToSummarize,
+        serverConfig.inference.contextLength,
+      )
+    : await buildSummaryPrompt(
+        lang,
+        customPromptTexts,
+        textToSummarize,
+        serverConfig.inference.contextLength,
+      );
 
   addLogFields<"inferenceWorker.run">({
     "inference.prompt.size": Buffer.byteLength(summaryPrompt, "utf8"),
   });
 
   const summaryResult = await inferenceClient.inferFromText(summaryPrompt, {
-    schema: null, // Summaries are typically free-form text
+    // The video path asks for {title, summary} JSON; every other bookmark
+    // gets free-form summary text, which is typically the better fit for
+    // whatever a summary model produces unprompted.
+    schema: isVideoWithTranscript ? videoSummarySchema : null,
     abortSignal: job.abortSignal,
   });
 
@@ -202,14 +240,35 @@ URL: ${link.url ?? ""}
     "inference.total_tokens": summaryResult.totalTokens,
   });
 
+  // The video path's title is a genuine enhancement — falling back to a
+  // free-form summary (dropping the title entirely) on a JSON hiccup beats
+  // failing the whole job over a title the rest of the app already has a
+  // fallback for (getDenseRowTitle falls back to the crawled page title).
+  let title: string | undefined;
+  let summary = summaryResult.response;
+  if (isVideoWithTranscript) {
+    const parsed = videoSummarySchema.safeParse(
+      parseJsonFromLLMResponse(summaryResult.response),
+    );
+    if (parsed.success) {
+      title = parsed.data.title.trim() || undefined;
+      summary = parsed.data.summary;
+    } else {
+      logger.warn(
+        `[inference][${jobId}] Video summary response for bookmark ${bookmarkId} wasn't the expected {title, summary} JSON (${parsed.error.message}). Storing it as a plain summary instead.`,
+      );
+    }
+  }
+
   logger.info(
-    `[inference][${jobId}] Generated summary for bookmark "${bookmarkId}" using ${summaryResult.totalTokens} tokens.`,
+    `[inference][${jobId}] Generated ${title ? "title + " : ""}summary for bookmark "${bookmarkId}" using ${summaryResult.totalTokens} tokens.`,
   );
 
   await db
     .update(bookmarks)
     .set({
-      summary: summaryResult.response,
+      summary,
+      ...(title ? { title } : {}),
       modifiedAt: new Date(),
     })
     .where(eq(bookmarks.id, bookmarkId));

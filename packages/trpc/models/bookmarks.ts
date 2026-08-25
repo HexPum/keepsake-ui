@@ -36,6 +36,7 @@ import { EmbeddingsQueue, SearchIndexingQueue } from "@karakeep/shared-server";
 import { WebhooksService } from "./webhooks.service";
 import { deleteAsset, readAsset } from "@karakeep/shared/assetdb";
 import { getAlignedExpiry } from "@karakeep/shared/signedTokens";
+import { stripSummaryMarkers } from "@karakeep/shared/summaryMarkers";
 import {
   BookmarkTypes,
   DEFAULT_NUM_BOOKMARKS_PER_PAGE,
@@ -409,7 +410,10 @@ export class Bookmark extends BareBookmark {
       createdAt: bookmark.createdAt,
       modifiedAt: bookmark.modifiedAt,
       title: bookmark.title,
-      summary: bookmark.summary,
+      // Strips caption/transcript source markers a video summary may carry
+      // (see summaryMarkers.ts) — this debug view is for inspecting
+      // readable state, not the literal column bytes.
+      summary: stripSummaryMarkers(bookmark.summary),
       taggingStatus: bookmark.taggingStatus,
       summarizationStatus: bookmark.summarizationStatus,
       embeddingStatus: bookmark.embeddingStatus,

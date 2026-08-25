@@ -87,4 +87,20 @@ describe("summaryPreview", () => {
   it("returns null when there is nothing to show", () => {
     expect(summaryPreview(null)).toBeNull();
   });
+
+  it("strips caption/transcript source markers a video summary may carry", () => {
+    expect(
+      summaryPreview(
+        "⟦caption⟧Intro line.⟦/caption⟧ ⟦transcript⟧More.⟦/transcript⟧",
+      ),
+    ).toBe("Intro line. More.");
+  });
+
+  it("strips markers from a bullets-only summary too", () => {
+    expect(
+      summaryPreview(
+        "- ⟦caption⟧one⟦/caption⟧\n- ⟦transcript⟧two⟦/transcript⟧",
+      ),
+    ).toBe("one · two");
+  });
 });

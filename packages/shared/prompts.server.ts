@@ -1,7 +1,11 @@
 import type { Tiktoken } from "js-tiktoken";
 
 import type { ZTagStyle } from "./types/users";
-import { constructSummaryPrompt, constructTextTaggingPrompt } from "./prompts";
+import {
+  constructSummaryPrompt,
+  constructTextTaggingPrompt,
+  constructVideoSummaryPrompt,
+} from "./prompts";
 
 let encoding: Tiktoken | null = null;
 
@@ -88,4 +92,19 @@ export async function buildSummaryPrompt(
   const truncatedContent =
     available === 0 ? "" : await truncateContent(content, available);
   return constructSummaryPrompt(lang, customPrompts, truncatedContent);
+}
+
+export async function buildVideoSummaryPrompt(
+  lang: string,
+  customPrompts: string[],
+  content: string,
+  contextLength: number,
+): Promise<string> {
+  content = preprocessContent(content);
+  const promptTemplate = constructVideoSummaryPrompt(lang, customPrompts, "");
+  const promptSize = await calculateNumTokens(promptTemplate);
+  const available = Math.max(0, contextLength - promptSize);
+  const truncatedContent =
+    available === 0 ? "" : await truncateContent(content, available);
+  return constructVideoSummaryPrompt(lang, customPrompts, truncatedContent);
 }

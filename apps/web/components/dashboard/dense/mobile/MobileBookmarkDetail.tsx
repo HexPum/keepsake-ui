@@ -7,6 +7,7 @@ import {
   FavouritedActionIcon,
 } from "@/components/dashboard/bookmarks/icons";
 import { DenseRowOverflowMenu } from "@/components/dashboard/dense/DenseRowOverflowMenu";
+import { SummaryAspectText } from "@/components/dashboard/dense/SummaryAspectText";
 import { AssetContentSection } from "@/components/dashboard/preview/AssetContentSection";
 import AttachmentBox from "@/components/dashboard/preview/AttachmentBox";
 import HighlightsBox from "@/components/dashboard/preview/HighlightsBox";
@@ -342,7 +343,7 @@ export function MobileBookmarkDetail({
             </div>
           ) : lead ? (
             <p className="text-k-summary-strong text-[13.5px] leading-[1.65] [text-wrap:pretty]">
-              {lead}
+              <SummaryAspectText text={lead} />
             </p>
           ) : (
             <p className="text-k-fg-dim text-[13.5px] leading-[1.65]">
@@ -357,7 +358,7 @@ export function MobileBookmarkDetail({
                     {String(i + 1).padStart(2, "0")}
                   </span>
                   <span className="text-k-fg-muted text-[12.5px] leading-[1.55]">
-                    {point}
+                    <SummaryAspectText text={point} />
                   </span>
                 </div>
               ))}
@@ -367,7 +368,7 @@ export function MobileBookmarkDetail({
 
         {trail && (
           <p className="text-k-summary-strong pt-[18px] text-[14.5px] leading-[1.72] [text-wrap:pretty]">
-            {trail}
+            <SummaryAspectText text={trail} />
           </p>
         )}
 

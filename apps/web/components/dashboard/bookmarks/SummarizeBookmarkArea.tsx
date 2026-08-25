@@ -12,6 +12,7 @@ import {
   useSummarizeBookmark,
   useUpdateBookmark,
 } from "@karakeep/shared-react/hooks/bookmarks";
+import { stripSummaryMarkers } from "@karakeep/shared/summaryMarkers";
 import { BookmarkTypes, ZBookmark } from "@karakeep/shared/types/bookmarks";
 
 function AISummary({
@@ -126,7 +127,11 @@ export default function SummarizeBookmarkArea({
     return (
       <AISummary
         bookmarkId={bookmark.id}
-        summary={bookmark.summary}
+        // This component doesn't render the caption/transcript source
+        // markers a video summary may contain (that's DenseBookmarkDetail's
+        // SummaryAspectText) — strip them so they don't show up as literal
+        // ⟦caption⟧ text here instead.
+        summary={stripSummaryMarkers(bookmark.summary)}
         readOnly={readOnly}
       />
     );

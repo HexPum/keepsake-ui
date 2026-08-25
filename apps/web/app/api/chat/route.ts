@@ -13,6 +13,7 @@ import { z } from "zod";
 import { streamChatCompletion } from "@karakeep/shared/chatInference";
 import serverConfig from "@karakeep/shared/config";
 import { constructChatPrompt } from "@karakeep/shared/prompts";
+import { stripSummaryMarkers } from "@karakeep/shared/summaryMarkers";
 import { ZBookmark } from "@karakeep/shared/types/bookmarks";
 
 // Deliberately minimal and one-shot: no chatSessions/chatMessages writes, no
@@ -122,7 +123,10 @@ function buildRetrievedContext(bookmarks: ZBookmark[]): string {
     .map((bookmark) => {
       const parts = [`Title: ${getDenseRowTitle(bookmark)}`];
       if (bookmark.summary) {
-        parts.push(`Summary: ${bookmark.summary}`);
+        // Strip caption/transcript source markers (see summaryMarkers.ts) —
+        // the model answering chat should see plain prose, not this fork's
+        // internal UI markup for a video summary.
+        parts.push(`Summary: ${stripSummaryMarkers(bookmark.summary)}`);
       }
       if (bookmark.note) {
         parts.push(`Note: ${bookmark.note}`);
