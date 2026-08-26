@@ -12,13 +12,14 @@ import { cn } from "@/lib/utils";
 import {
   Archive,
   ChevronDown,
+  FolderClosed,
   Hash,
   Inbox,
+  MessageCircle,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
   Settings,
-  Sparkles,
   Star,
 } from "lucide-react";
 
@@ -292,7 +293,10 @@ export default function DenseSidebar({
     {
       href: "/dashboard/chat",
       label: "Chat",
-      icon: <Sparkles size={15} strokeWidth={1.75} />,
+      // A speech bubble, not the sparkle — the sparkle stays reserved for
+      // the AI-summary marker on rows/cards (DenseBookmarkRow/Card), where
+      // it means "this was AI-summarised", not "chat".
+      icon: <MessageCircle size={15} strokeWidth={1.75} />,
     },
   ];
 
@@ -351,6 +355,11 @@ export default function DenseSidebar({
               />
             ))}
           </ul>
+
+          {/* Trenner setting the primary nav apart from the Lists/Tags
+              sections below — a subtle border-tone hairline, matching the
+              rail's own separators, not a hard white line. */}
+          <div aria-hidden className="bg-k-border h-px flex-none" />
 
           {/* Lists. Always rendered — it carries the "create list" affordance
               and the link to the full lists page, so it must be reachable
@@ -487,9 +496,16 @@ export default function DenseSidebar({
               tone={pathname === item.href ? "accent" : "dim"}
             />
           ))}
+          {/* Same Trenner as the expanded panel's, setting the primary nav
+              (Files/Favourites/Archive/Chat) apart from Lists/Tags below. */}
+          <div aria-hidden className="bg-k-border h-px w-[26px] flex-none" />
           <RailIcon
             href="/dashboard/lists"
-            icon={<Inbox size={18} strokeWidth={1.75} />}
+            // Its own glyph, not Files' Inbox again — a folder reads as
+            // "lists/collections" and keeps this rail icon distinct from
+            // Files directly above it, while staying in the same lucide
+            // line-icon family.
+            icon={<FolderClosed size={18} strokeWidth={1.75} />}
             label="Lists"
             tone={pathname.startsWith("/dashboard/lists") ? "accent" : "dim"}
           />
