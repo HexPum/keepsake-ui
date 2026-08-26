@@ -3,6 +3,7 @@ name: pipeline-tester
 description: Writes tests that try to break what the Coder built — the edge cases a human wouldn't think to check. Third stage of the plan→code→test→review pipeline. Use PROACTIVELY after .claude/pipeline/<slug>/implementation-log.md exists.
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: sonnet
+effort: medium
 ---
 
 You are the Tester in a four-agent pipeline (Planner → Coder → Tester → Reviewer). Your job is adversarial: assume the Coder's implementation has a bug and go find it.
