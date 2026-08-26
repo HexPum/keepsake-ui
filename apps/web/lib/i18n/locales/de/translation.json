@@ -873,10 +873,10 @@
     },
     "leave_list": {
       "title": "Liste verlassen",
-      "confirm_message": "Bist du sicher, dass du {{icon}} {{name}} verlassen möchtest?",
+      "confirm_message": "Bist du sicher, dass du {{name}} verlassen möchtest?",
       "warning": "Du kannst keine Lesezeichen in dieser Liste mehr sehen oder darauf zugreifen. Der Listeninhaber kann dich bei Bedarf wieder hinzufügen.",
       "action": "Liste verlassen",
-      "success": "Du hast \"{{icon}} {{name}}\" verlassen"
+      "success": "Du hast \"{{name}}\" verlassen"
     },
     "invitations": {
       "pending": "Ausstehende Einladungen",

@@ -867,10 +867,10 @@
     },
     "leave_list": {
       "title": "Forlat liste",
-      "confirm_message": "Er du sikker på at du vil forlate {{icon}} {{name}}?",
+      "confirm_message": "Er du sikker på at du vil forlate {{name}}?",
       "warning": "Du vil ikke lenger kunne se eller få tilgang til bokmerker i denne lista. Listeeieren kan legge deg tilbake hvis nødvendig.",
       "action": "Forlat liste",
-      "success": "Du har forlatt \"{{icon}} {{name}}\""
+      "success": "Du har forlatt \"{{name}}\""
     },
     "invitations": {
       "pending": "Ventende invitasjoner",

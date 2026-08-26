@@ -169,10 +169,10 @@
     },
     "leave_list": {
       "title": "Opustiť zoznam",
-      "confirm_message": "Určite chceš odísť z {{icon}} {{name}}?",
+      "confirm_message": "Určite chceš odísť z {{name}}?",
       "warning": "Už nebudeš môcť prezerať ani pristupovať k záložkám v tomto zozname. Vlastník zoznamu ťa môže znova pridať, ak to bude potrebné.",
       "action": "Opustiť zoznam",
-      "success": "Opustil/a si \"{{icon}} {{name}}\""
+      "success": "Opustil/a si \"{{name}}\""
     },
     "invitations": {
       "pending": "Pozvánky čakajúce na vybavenie",

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { CollapsibleTriggerChevron } from "@/components/ui/collapsible";
 import { useTranslation } from "@/lib/i18n/client";
+import { ListIcon } from "@/lib/lists/listIcon";
 import { cn } from "@/lib/utils";
 import { MoreHorizontal } from "lucide-react";
 
@@ -90,7 +91,7 @@ function ListItem({
                 : "border-border bg-muted/55",
             )}
           >
-            {icon}
+            <ListIcon name={icon} />
           </span>
           <div className="flex min-w-0 flex-col">
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
@@ -185,7 +186,7 @@ export default function AllListsView({
           <ListItem
             collapsible={false}
             name={t("lists.favourites")}
-            icon="⭐️"
+            icon="star"
             description="Things I keep coming back to."
             itemCount={favoritesCount}
             path={`/dashboard/favourites`}
@@ -194,7 +195,7 @@ export default function AllListsView({
           <ListItem
             collapsible={false}
             name={t("common.archive")}
-            icon="🗄️"
+            icon="archive"
             description="Cold storage, out of the way."
             itemCount={archivedCount}
             path={`/dashboard/archive`}

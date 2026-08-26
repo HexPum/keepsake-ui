@@ -994,10 +994,10 @@
     },
     "leave_list": {
       "title": "Opuść listę",
-      "confirm_message": "Na pewno chcesz opuścić {{icon}} {{name}}?",
+      "confirm_message": "Na pewno chcesz opuścić {{name}}?",
       "warning": "Nie będziesz już mógł przeglądać ani uzyskiwać dostępu do zakładek na tej liście. Właściciel listy może Cię ponownie dodać w razie potrzeby.",
       "action": "Opuść listę",
-      "success": "Opuściłeś \"{{icon}} {{name}}\""
+      "success": "Opuściłeś \"{{name}}\""
     },
     "invitations": {
       "pending": "Zaproszenia oczekujące",

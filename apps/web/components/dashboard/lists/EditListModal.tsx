@@ -38,8 +38,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
 import { useTranslation } from "@/lib/i18n/client";
-import data from "@emoji-mart/data";
-import Picker from "@emoji-mart/react";
+import { DEFAULT_LIST_ICON, ListIcon } from "@/lib/lists/listIcon";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { X } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -57,6 +56,7 @@ import {
 
 import QueryExplainerTooltip from "../search/QueryExplainerTooltip";
 import { BookmarkListSelector } from "./BookmarkListSelector";
+import { PixelIconPicker } from "./PixelIconPicker";
 
 export function EditListModal({
   open: userOpen,
@@ -86,7 +86,7 @@ export function EditListModal({
     defaultValues: {
       name: list?.name ?? prefill?.name ?? "",
       description: list?.description ?? prefill?.description ?? "",
-      icon: list?.icon ?? prefill?.icon ?? "📁",
+      icon: list?.icon ?? prefill?.icon ?? DEFAULT_LIST_ICON,
       parentId: list?.parentId ?? prefill?.parentId,
       type: list?.type ?? prefill?.type ?? "manual",
       query: list?.query ?? prefill?.query ?? undefined,
@@ -101,7 +101,7 @@ export function EditListModal({
     form.reset({
       name: list?.name ?? prefill?.name ?? "",
       description: list?.description ?? prefill?.description ?? "",
-      icon: list?.icon ?? prefill?.icon ?? "📁",
+      icon: list?.icon ?? prefill?.icon ?? DEFAULT_LIST_ICON,
       parentId: list?.parentId ?? prefill?.parentId,
       type: list?.type ?? prefill?.type ?? "manual",
       query: list?.query ?? prefill?.query ?? undefined,
@@ -230,14 +230,12 @@ export function EditListModal({
                       <FormControl>
                         <Popover>
                           <PopoverTrigger className="h-full rounded border border-input px-2 text-2xl">
-                            {field.value}
+                            <ListIcon name={field.value} />
                           </PopoverTrigger>
                           <PopoverContent className="w-auto">
-                            <Picker
-                              data={data}
-                              onEmojiSelect={(e: { native: string }) =>
-                                field.onChange(e.native)
-                              }
+                            <PixelIconPicker
+                              value={field.value}
+                              onChange={field.onChange}
                             />
                           </PopoverContent>
                         </Popover>

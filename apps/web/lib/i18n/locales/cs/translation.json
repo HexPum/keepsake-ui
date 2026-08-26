@@ -680,10 +680,10 @@
     },
     "leave_list": {
       "title": "Opustit Seznam",
-      "confirm_message": "Jsi si jistý, že chceš opustit {{icon}} {{name}}?",
+      "confirm_message": "Jsi si jistý, že chceš opustit {{name}}?",
       "warning": "Nebudeš už moct zobrazovat ani přistupovat k záložkám v tomto seznamu. Vlastník seznamu tě může, když bude potřeba, přidat zpět.",
       "action": "Opustit Seznam",
-      "success": "Opustil(a) jsi \"{{icon}} {{name}}\""
+      "success": "Opustil(a) jsi \"{{name}}\""
     },
     "invitations": {
       "pending": "Pozvánky čekající na vyřízení",

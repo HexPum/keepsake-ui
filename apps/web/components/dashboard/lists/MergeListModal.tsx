@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { toast } from "@/components/ui/sonner";
 import { Switch } from "@/components/ui/switch";
 import { useTranslation } from "@/lib/i18n/client";
+import { ListIcon } from "@/lib/lists/listIcon";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { X } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -127,7 +128,7 @@ export function MergeListModal({
             </DialogHeader>
             <div className="flex w-full gap-2 py-4">
               <span className="inline-flex aspect-square h-10 items-center justify-center rounded border border-input bg-transparent px-2 text-2xl">
-                {list.icon}
+                <ListIcon name={list.icon} />
               </span>
               <Input
                 type="text"

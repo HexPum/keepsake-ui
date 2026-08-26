@@ -956,10 +956,10 @@
     },
     "leave_list": {
       "title": "Zapusti seznam",
-      "confirm_message": "Ali si prepričan/-a, da želiš zapustiti {{icon}} {{name}}?",
+      "confirm_message": "Ali si prepričan/-a, da želiš zapustiti {{name}}?",
       "warning": "Ne boš si več mogel/-a ogledati ali dostopati do zaznamkov na tem seznamu. Lastnik seznama te lahko po potrebi doda nazaj.",
       "action": "Zapusti seznam",
-      "success": "Zapustil/-a si »{{icon}} {{name}}«"
+      "success": "Zapustil/-a si »{{name}}«"
     },
     "invitations": {
       "pending": "Povabila na čakanju",

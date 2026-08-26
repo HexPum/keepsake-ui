@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "@/components/ui/sonner";
 import { Switch } from "@/components/ui/switch";
 import { useTranslation } from "@/lib/i18n/client";
+import { ListIcon } from "@/lib/lists/listIcon";
 
 import type { ZBookmarkList } from "@karakeep/shared/types/lists";
 import { useDeleteBookmarkList } from "@karakeep/shared-react/hooks/lists";
@@ -29,7 +30,7 @@ export default function DeleteListConfirmationDialog({
   const { mutate: deleteList, isPending } = useDeleteBookmarkList({
     onSuccess: () => {
       toast({
-        description: `List "${list.icon} ${list.name}" ${deleteChildren ? "and all its children are " : "is "} deleted!`,
+        description: `List "${list.name}" ${deleteChildren ? "and all its children are " : "is "} deleted!`,
       });
       setOpen(false);
       if (currentPath.includes(list.id)) {
@@ -52,7 +53,8 @@ export default function DeleteListConfirmationDialog({
       description={
         <div className="space-y-3">
           <p className="text-balance">
-            Are you sure you want to delete {list.icon} {list.name}?
+            Are you sure you want to delete <ListIcon name={list.icon} />{" "}
+            {list.name}?
           </p>
           <p className="text-balance text-sm text-muted-foreground">
             {t("lists.delete_list.description")}

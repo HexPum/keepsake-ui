@@ -874,10 +874,10 @@
     },
     "leave_list": {
       "title": "Părăsește lista",
-      "confirm_message": "Sigur dorești să părăsești {{icon}} {{name}}?",
+      "confirm_message": "Sigur dorești să părăsești {{name}}?",
       "warning": "Nu vei mai putea vizualiza sau accesa semnele de carte din această listă. Proprietarul listei te poate adăuga din nou dacă este necesar.",
       "action": "Părăsește lista",
-      "success": "Ai părăsit „{{icon}} {{name}}”"
+      "success": "Ai părăsit „{{name}}”"
     },
     "summary_list_one": "{{count}} listă",
     "summary_list_other": "{{count}} liste",

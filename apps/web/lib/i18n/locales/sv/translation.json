@@ -873,10 +873,10 @@
     },
     "leave_list": {
       "title": "Lämna lista",
-      "confirm_message": "Är du säker på att du vill lämna {{icon}} {{name}}?",
+      "confirm_message": "Är du säker på att du vill lämna {{name}}?",
       "warning": "Du kommer inte längre att kunna visa eller komma åt bokmärken i den här listan. Listans ägare kan lägga till dig igen om det behövs.",
       "action": "Lämna lista",
-      "success": "Du har lämnat \"{{icon}} {{name}}\""
+      "success": "Du har lämnat \"{{name}}\""
     },
     "invitations": {
       "pending": "Väntande inbjudningar",

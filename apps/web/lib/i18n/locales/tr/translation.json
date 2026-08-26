@@ -876,10 +876,10 @@
     },
     "leave_list": {
       "title": "Listeden Ayrıl",
-      "confirm_message": "{{icon}} {{name}} listesinden ayrılmak istediğinden emin misin?",
+      "confirm_message": "{{name}} listesinden ayrılmak istediğinden emin misin?",
       "warning": "Artık bu listedeki yer işaretlerini görüntüleyemeyecek veya bunlara erişemeyeceksin. Liste sahibi gerekirse seni geri ekleyebilir.",
       "action": "Listeden Ayrıl",
-      "success": "\"{{icon}} {{name}}\" listesinden ayrıldın"
+      "success": "\"{{name}}\" listesinden ayrıldın"
     },
     "invitations": {
       "pending": "Bekleyen Davetiyeler",

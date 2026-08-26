@@ -866,10 +866,10 @@
     },
     "leave_list": {
       "title": "リストから退会する",
-      "confirm_message": "{{icon}} {{name}} から退会してもよろしいですか？",
+      "confirm_message": "{{name}} から退会してもよろしいですか？",
       "warning": "このリストのブックマークを表示またはアクセスできなくなります。必要に応じて、リストのオーナーがあなたを追加し直すことができます。",
       "action": "リストから退会する",
-      "success": "「{{icon}} {{name}}」から退会しました。"
+      "success": "「{{name}}」から退会しました。"
     },
     "invitations": {
       "pending": "招待待ち",

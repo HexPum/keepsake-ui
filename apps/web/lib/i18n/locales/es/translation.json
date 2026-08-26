@@ -873,10 +873,10 @@
     },
     "leave_list": {
       "title": "Salir de la lista",
-      "confirm_message": "¿Estás seguro de que quieres salir de {{icon}} {{name}}?",
+      "confirm_message": "¿Estás seguro de que quieres salir de {{name}}?",
       "warning": "Ya no podrás ver ni acceder a los marcadores de esta lista. El propietario de la lista puede volverte a añadir si es necesario.",
       "action": "Salir de la lista",
-      "success": "Has abandonado \"{{icon}} {{name}}\""
+      "success": "Has abandonado \"{{name}}\""
     },
     "invitations": {
       "pending": "Invitaciones pendientes",

@@ -873,10 +873,10 @@
     },
     "leave_list": {
       "title": "离开列表",
-      "confirm_message": "您确定要离开 {{icon}} {{name}} 吗？",
+      "confirm_message": "您确定要离开 {{name}} 吗？",
       "warning": "您将无法再查看或访问此列表中的书签。列表所有者可以在需要时重新添加您。",
       "action": "离开列表",
-      "success": "你已经离开了“{{icon}} {{name}}”"
+      "success": "你已经离开了“{{name}}”"
     },
     "invitations": {
       "pending": "待处理的邀请",

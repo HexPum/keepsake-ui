@@ -962,10 +962,10 @@
     },
     "leave_list": {
       "title": "Forlad liste",
-      "confirm_message": "Er du sikker på, at du vil forlade {{icon}} {{name}}?",
+      "confirm_message": "Er du sikker på, at du vil forlade {{name}}?",
       "warning": "Du vil ikke længere kunne se eller tilgå bogmærker på denne liste. Listens ejer kan tilføje dig igen, hvis det skulle blive nødvendigt.",
       "action": "Forlad liste",
-      "success": "Du har forladt \"{{icon}} {{name}}\""
+      "success": "Du har forladt \"{{name}}\""
     },
     "invitations": {
       "pending": "Afventende invitationer",

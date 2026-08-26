@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/card";
 import { toast } from "@/components/ui/sonner";
 import { useTranslation } from "@/lib/i18n/client";
+import { ListIcon } from "@/lib/lists/listIcon";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, Mail, X } from "lucide-react";
 
@@ -81,7 +82,7 @@ function InvitationRow({ invitation }: { invitation: Invitation }) {
         <div className="flex items-center gap-2">
           <span className="font-medium">{invitation.list.name}</span>
           <span className="text-xs text-muted-foreground">
-            {invitation.list.icon}
+            <ListIcon name={invitation.list.icon} />
           </span>
         </div>
         {invitation.list.description && (

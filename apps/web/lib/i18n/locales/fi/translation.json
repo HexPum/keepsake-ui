@@ -877,10 +877,10 @@
     },
     "leave_list": {
       "title": "Poistu listasta",
-      "confirm_message": "Oletko varma, että haluat poistua listasta {{icon}} {{name}}?",
+      "confirm_message": "Oletko varma, että haluat poistua listasta {{name}}?",
       "warning": "Et voi enää nähdä tai käyttää tämän listan kirjanmerkkejä. Listan omistaja voi lisätä sinut takaisin tarvittaessa.",
       "action": "Poistu listasta",
-      "success": "Olet poistunut listasta \"{{icon}} {{name}}\""
+      "success": "Olet poistunut listasta \"{{name}}\""
     },
     "invitations": {
       "pending": "Odottavat kutsut",

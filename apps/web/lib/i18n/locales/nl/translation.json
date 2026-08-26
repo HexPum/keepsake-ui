@@ -978,10 +978,10 @@
     },
     "leave_list": {
       "title": "Lijst verlaten",
-      "confirm_message": "Weet je zeker dat je {{icon}} {{name}} wilt verlaten?",
+      "confirm_message": "Weet je zeker dat je {{name}} wilt verlaten?",
       "warning": "Je kunt geen bladwijzers meer bekijken of openen in deze lijst. De eigenaar van de lijst kan je indien nodig weer toevoegen.",
       "action": "Lijst verlaten",
-      "success": "Je hebt \"{{icon}} {{name}}\" verlaten"
+      "success": "Je hebt \"{{name}}\" verlaten"
     },
     "invitations": {
       "pending": "Openstaande uitnodigingen",

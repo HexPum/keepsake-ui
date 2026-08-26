@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/lib/i18n/client";
+import { ListIcon } from "@/lib/lists/listIcon";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { MoreHorizontal, Sparkles } from "lucide-react";
 
@@ -62,7 +63,7 @@ export default function ListHeader({
     <div className="flex items-start justify-between gap-4">
       <div className="flex min-w-0 flex-1 items-start gap-4">
         <span className="flex size-16 shrink-0 items-center justify-center rounded-2xl bg-muted text-4xl">
-          {list.icon}
+          <ListIcon name={list.icon} />
         </span>
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-2xl font-semibold leading-tight">

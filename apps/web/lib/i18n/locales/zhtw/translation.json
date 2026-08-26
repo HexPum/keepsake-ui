@@ -873,10 +873,10 @@
     },
     "leave_list": {
       "title": "離開清單",
-      "confirm_message": "您確定要離開 {{icon}} {{name}} 嗎？",
+      "confirm_message": "您確定要離開 {{name}} 嗎？",
       "warning": "您將無法再檢視或存取此清單中的書籤。清單擁有者可以隨時將您重新加入。",
       "action": "離開清單",
-      "success": "您已離開「{{icon}} {{name}}」"
+      "success": "您已離開「{{name}}」"
     },
     "invitations": {
       "pending": "等待中的邀請",

@@ -932,10 +932,10 @@
     },
     "leave_list": {
       "title": "Abbandona l'elenco",
-      "confirm_message": "Sei sicuro di voler abbandonare {{icon}} {{name}}?",
+      "confirm_message": "Sei sicuro di voler abbandonare {{name}}?",
       "warning": "Non potrai più visualizzare o accedere ai segnalibri in questo elenco. Il proprietario dell'elenco potrà aggiungerti di nuovo se necessario.",
       "action": "Abbandona l'elenco",
-      "success": "Hai abbandonato \"{{icon}} {{name}}\""
+      "success": "Hai abbandonato \"{{name}}\""
     },
     "invitations": {
       "pending": "Inviti in sospeso",

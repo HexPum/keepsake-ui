@@ -31,7 +31,6 @@ export default function LeaveListConfirmationDialog({
       onSuccess: () => {
         toast({
           description: t("lists.leave_list.success", {
-            icon: list.icon,
             name: list.name,
           }),
         });
@@ -61,7 +60,6 @@ export default function LeaveListConfirmationDialog({
         <div className="space-y-3">
           <p className="text-balance">
             {t("lists.leave_list.confirm_message", {
-              icon: list.icon,
               name: list.name,
             })}
           </p>

@@ -680,10 +680,10 @@
     },
     "leave_list": {
       "title": "Fág Liosta",
-      "confirm_message": "An bhfuil tú cinnte gur mhaith leat {{icon}} {{name}} a fhágáil?",
+      "confirm_message": "An bhfuil tú cinnte gur mhaith leat {{name}} a fhágáil?",
       "warning": "Ní bheidh tú in ann cluaisíní a fheiceáil nó rochtain a fháil orthu sa liosta seo a thuilleadh. Is féidir le húinéir an liosta tú a chur ar ais leis más gá.",
       "action": "Fág Liosta",
-      "success": "D'fhág tú \"{{icon}} {{name}}\""
+      "success": "D'fhág tú \"{{name}}\""
     },
     "invitations": {
       "pending": "Cuirí ar Feitheamh",
