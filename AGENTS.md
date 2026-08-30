@@ -9,6 +9,35 @@ This document provides context about the Keepsake project for the different agen
 > hand-edit it, just let it get committed if it changes. `apps/web/CLAUDE.md`
 > is a one-line `@AGENTS.md` import stub, not a duplicate of this file.
 
+## Working with Codex (the second coder)
+
+This repo is driven by two agent systems. Claude Code runs the structured
+pipeline (`/ship`, `/exterminate`, the subagents under `.claude/agents/`).
+**Codex is the second coder** — a single, capable agent used for direct,
+unattended execution, recovery work, and cross-checks. Both read this file.
+
+Rules that apply to Codex specifically (and are good practice for any agent):
+
+- **One working tree per task.** Never run a second agent (Codex or Claude)
+  in the same dirty tree as another run. Check `git status --short` first;
+  if it's dirty with files outside your task, stop and say so instead of
+  starting. Use `git worktree add ../keepsake-<slug> -b <branch>` for any
+  parallel work. (Two `ship` lanes once shared this tree and the reviewer
+  saw a mixed diff — see MISTAKES.md.)
+- **Commit by exact path, never `git add -A` / `git add .`.** Before every
+  commit, run `git status --short` and confirm every staged file is one you
+  actually edited. The pre-commit hook runs `pnpm preflight`; if it fails on
+  a file you did not touch, that file belongs to another run — leave it.
+- **MISTAKES.md is yours to write too.** The four triggers in the Docs
+  section apply to every agent, including Codex. Log an entry in the same
+  turn.
+- **The pre-commit hook is the gate, not a suggestion.** If it fails, fix
+  the cause (lint/format/typecheck) — never `--no-verify`.
+- **Recovery, not heroics.** If you find a half-finished state from another
+  run (uncommitted work, an open `.claude/pipeline/<slug>/`), read its
+  `implementation-log.md` / `review.md` first and prefer committing /
+  reporting over rewriting.
+
 ## What this is
 
 Keepsake is a **UI fork** of [Karakeep](https://github.com/karakeep-app/karakeep)
