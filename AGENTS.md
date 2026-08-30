@@ -131,6 +131,18 @@ under these two directories in `apps/web`:
   before repeating an approach that looks familiar. Log mistakes in
   `MISTAKES.md` (what happened, root cause, prevention); when the same one
   recurs 4-5 times, promote it from there into a hard rule in this file.
+  Log an entry in the same turn whenever:
+  - a user correction happens (ordering, value, wording, scope — no matter
+    how small);
+  - a fix commit is needed because an earlier commit broke, mis-did, or
+    left incomplete something (legitimate follow-on feature work doesn't
+    count);
+  - the same root cause recurs a second time (also flag it as a promotion
+    candidate);
+  - a guessed value or scope shipped as done without visual verification.
+
+  The `mistakes-integrator` agent runs this same checklist after every
+  `/ship` and `/exterminate` run to backfill anything missed.
 
 ## Common commands
 
