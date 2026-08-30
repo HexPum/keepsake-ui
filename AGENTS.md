@@ -45,6 +45,36 @@ Codex runs `codex review` (or a spawn_agent review pass) against the diff
 and confirms the spec was followed. That is the gate — Claude never
 self-certifies.
 
+### The shared sandbox lane (test/QA execution)
+
+One sandbox **image** serves all agents, but **every task gets a fresh
+container** — a running container is never shared between parallel agents,
+same rule as worktrees. Purpose: reviewers and QA personas run REAL tests
+against a REAL app instance, not mocks or typechecks.
+
+What already exists in this repo (use it, don't rebuild it):
+- `packages/e2e_tests/` — vitest + isolated docker stack (own web, workers,
+  meilisearch, chrome containers, own ports) with a seeded admin user
+  (`admin@example.com` / `test1234`, created in `setup/seed.ts`).
+  `pnpm --filter e2e_tests test` spins the whole stack up and tears it down.
+- `docker/docker-compose.dev.yml` — full dev stack incl. headless Chrome
+  (`karakeep-chrome`) that personas can drive over CDP.
+
+Rules for agent test/QA runs:
+- All app-level testing happens inside this sandbox lane (or the e2e stack),
+  never against the user's live instance (`docker-web-1` etc. are the user's
+  own data and are OFF LIMITS to agents).
+- QA personas (small/cheap subagents — Haiku-class for Claude, Luna for
+  Codex) are given: (a) a persona brief (who they are, what they want),
+  (b) the sandbox base URL + seeded login, (c) a precise checklist of
+  features to exercise, (d) the report format below. They are real users
+  for the duration of the run: they click, they read, they report.
+- Persona report format (fixed, so findings are comparable):
+  PASS/FAIL per checklist item + one-line reproduction step + observed vs
+  expected. No prose essays; no "looks good" without a listed check.
+- A persona run that finds a failure does NOT fix it. It reports; the
+  architect (Codex) reads the report and writes a fix spec for Claude.
+
 Browser isolation (both agents): agents must drive their OWN headless
 browser for verification (`codex` browser_use spawns its own instance;
 `browser_use_external` is disabled globally). Never attach to, read, or
