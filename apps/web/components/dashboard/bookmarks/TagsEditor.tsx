@@ -15,6 +15,7 @@ import {
 import { useClientConfig } from "@/lib/clientConfig";
 import { useTranslation } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
+import { useTagPendingOps } from "@/lib/dense/useTagPendingOps";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Command as CommandPrimitive } from "cmdk";
 import { Check, Loader2, Plus, Sparkles, X } from "lucide-react";
@@ -22,6 +23,16 @@ import { Check, Loader2, Plus, Sparkles, X } from "lucide-react";
 import type { ZBookmarkTags } from "@karakeep/shared/types/tags";
 import { useDebounce } from "@karakeep/shared-react/hooks/use-debounce";
 import { useTRPC } from "@karakeep/shared-react/trpc";
+import { tagCaseInsensitiveKey } from "@karakeep/shared/utils/tag";
+
+/** A chip this component actually renders, regardless of which of the two
+ *  internal models (see below) produced it. */
+interface DisplayedTag {
+  id: string;
+  name: string;
+  attachedBy: "human" | "ai";
+  pending: boolean;
+}
 
 export function TagsEditor({
   tags: _tags,
@@ -32,8 +43,14 @@ export function TagsEditor({
   placeholder,
 }: {
   tags: ZBookmarkTags[];
-  onAttach: (tag: { tagName: string; tagId?: string }) => void;
-  onDetach: (tag: { tagName: string; tagId: string }) => void;
+  onAttach: (tag: {
+    tagName: string;
+    tagId?: string;
+  }) => void | Promise<unknown>;
+  onDetach: (tag: {
+    tagName: string;
+    tagId: string;
+  }) => void | Promise<unknown>;
   disabled?: boolean;
   allowCreation?: boolean;
   placeholder?: string;
@@ -46,56 +63,113 @@ export function TagsEditor({
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [open, setOpen] = React.useState(false);
   const [inputValue, setInputValue] = React.useState("");
-  const [optimisticTags, setOptimisticTags] = useState<ZBookmarkTags[]>(_tags);
-  const tempIdCounter = React.useRef(0);
-  const hasInitializedRef = React.useRef(_tags.length > 0);
 
-  const generateTempId = React.useCallback(() => {
-    tempIdCounter.current += 1;
-    if (
-      typeof crypto !== "undefined" &&
-      typeof crypto.randomUUID === "function"
-    ) {
-      return `temp-${crypto.randomUUID()}`;
-    }
-
-    return `temp-${Date.now()}-${tempIdCounter.current}`;
-  }, []);
+  // --- Two independent tag-state models, selected by `allowCreation` ---
+  //
+  // `allowCreation === true` (the real bookmark tag editor, driven by
+  // BookmarkTagsEditor's actual `bookmarks.updateTags` mutation): server
+  // state (`_tags`) is the truth, and a small explicitly tracked overlay of
+  // in-flight attach/detach operations sits on top of it. The whole state
+  // machine — minting an op, the `isThenable` bridge to the mutation
+  // promise, settling on success/error, keeping a pending attach's `×`
+  // disabled — lives in `useTagPendingOps` (lib/dense/useTagPendingOps.ts),
+  // extracted there so it's unit-testable without a DOM (this project's
+  // convention, see that module's header comment for the full rationale
+  // and why settlement is server-state-driven rather than
+  // mutation-promise-driven).
+  //
+  // `allowCreation === false` (today, only AISettings' curated-tags list):
+  // `onAttach`/`onDetach` are synchronous local-state setters, not a real
+  // server mutation, and the existing behaviour there — including its own
+  // latent "never re-syncs from props after the first non-empty render"
+  // bug — is explicitly out of scope for this fix (see spec §2.5/§6.5).
+  // Changing this branch's semantics risks a real, working settings screen
+  // for a bug nobody asked to fix here, so it keeps the original
+  // `optimisticTags` mechanism verbatim.
+  const [legacyOptimisticTags, setLegacyOptimisticTags] =
+    useState<ZBookmarkTags[]>(_tags);
+  const legacyHasInitializedRef = React.useRef(_tags.length > 0);
 
   React.useEffect(() => {
-    // When allowCreation is false, only sync on initial load
-    // After that, rely on optimistic updates to avoid re-ordering
+    if (allowCreation) return;
+    // When allowCreation is false, only sync on initial load. After that,
+    // rely on optimistic updates to avoid re-ordering. (Preserved bug —
+    // see the comment above.)
+    if (!legacyHasInitializedRef.current && _tags.length > 0) {
+      legacyHasInitializedRef.current = true;
+      setLegacyOptimisticTags(_tags);
+    }
+  }, [_tags, allowCreation]);
+
+  const {
+    displayedTags: pendingOpsDisplayedTags,
+    runAttach: runPendingAttach,
+    runDetach: runPendingDetach,
+  } = useTagPendingOps({ serverTags: _tags, onAttach, onDetach });
+
+  const displayedTags: DisplayedTag[] = allowCreation
+    ? pendingOpsDisplayedTags
+    : legacyOptimisticTags.map((tag) => ({ ...tag, pending: false }));
+
+  const runAttach = (rawName: string, existingTagId?: string) => {
     if (!allowCreation) {
-      if (!hasInitializedRef.current && _tags.length > 0) {
-        hasInitializedRef.current = true;
-        setOptimisticTags(_tags);
+      // Byte-for-byte with the pre-existing `select-option`/`create-option`
+      // cases this branch replaced: dedupe by id (not name), no trimming or
+      // normalisation, no case-insensitive E6/E7 guard. This branch's other
+      // latent bug (never re-syncing from props after the first non-empty
+      // mount — see the block comment above) is likewise left exactly as
+      // found, per spec §2.5/§6.5: it is AISettings' only call site, and
+      // "fixing" either here would be an unrequested change to a working
+      // settings screen.
+      if (existingTagId) {
+        setLegacyOptimisticTags((prev) => {
+          if (prev.some((tag) => tag.id === existingTagId)) {
+            return prev;
+          }
+          return [
+            ...prev,
+            {
+              id: existingTagId,
+              name: rawName,
+              attachedBy: "human" as const,
+            },
+          ];
+        });
+      } else {
+        setLegacyOptimisticTags((prev) => [
+          ...prev,
+          {
+            id: `temp-${Date.now()}-${prev.length}`,
+            name: rawName,
+            attachedBy: "human" as const,
+          },
+        ]);
       }
+      onAttach({ tagName: rawName, tagId: existingTagId });
       return;
     }
 
-    // For allowCreation mode, sync server state with optimistic state
-    setOptimisticTags((prev) => {
-      // Start with a copy to avoid mutating the previous state
-      const results = [...prev];
-      let changed = false;
+    runPendingAttach(rawName, existingTagId);
+  };
 
-      for (const tag of _tags) {
-        const idx = results.findIndex((t) => t.name === tag.name);
-        if (idx == -1) {
-          results.push(tag);
-          changed = true;
-          continue;
-        }
-        if (results[idx].id.startsWith("temp-")) {
-          results[idx] = tag;
-          changed = true;
-          continue;
-        }
-      }
+  const runDetach = (target: DisplayedTag) => {
+    if (target.pending) {
+      // Guarded in the UI too (the remove button is disabled), but keep
+      // the check here as a hard stop: a pending attach has no server tag
+      // id yet, so there is nothing valid to send a detach for.
+      return;
+    }
 
-      return changed ? results : prev;
-    });
-  }, [_tags, allowCreation]);
+    if (!allowCreation) {
+      setLegacyOptimisticTags((prev) =>
+        prev.filter((tag) => tag.id !== target.id),
+      );
+      onDetach({ tagId: target.id, tagName: target.name });
+      return;
+    }
+
+    runPendingDetach(target);
+  };
 
   // Debounce the search term before it hits the query so that fast typing
   // doesn't fire (and pile up) a separate tags.list request per keystroke.
@@ -125,7 +199,9 @@ export function TagsEditor({
     ),
   );
 
-  const selectedValues = optimisticTags.map((tag) => tag.id);
+  const selectedKeys = new Set(
+    displayedTags.map((tag) => tagCaseInsensitiveKey(tag.name)),
+  );
 
   // Add "create new" option if input doesn't match any existing option
   const trimmedInputValue = inputValue.trim();
@@ -170,65 +246,9 @@ export function TagsEditor({
     return baseOptions;
   }, [filteredOptions, trimmedInputValue, allowCreation]);
 
-  const onChange = (
-    actionMeta:
-      | { action: "create-option"; name: string }
-      | { action: "select-option"; id: string; name: string }
-      | {
-          action: "remove-value";
-          id: string;
-          name: string;
-        },
-  ) => {
-    switch (actionMeta.action) {
-      case "remove-value": {
-        setOptimisticTags((prev) => prev.filter((t) => t.id != actionMeta.id));
-        onDetach({
-          tagId: actionMeta.id,
-          tagName: actionMeta.name,
-        });
-        break;
-      }
-      case "create-option": {
-        const tempId = generateTempId();
-        setOptimisticTags((prev) => [
-          ...prev,
-          {
-            id: tempId,
-            name: actionMeta.name,
-            attachedBy: "human" as const,
-          },
-        ]);
-        onAttach({ tagName: actionMeta.name });
-        break;
-      }
-      case "select-option": {
-        setOptimisticTags((prev) => {
-          if (prev.some((tag) => tag.id === actionMeta.id)) {
-            return prev;
-          }
-
-          return [
-            ...prev,
-            {
-              id: actionMeta.id,
-              name: actionMeta.name,
-              attachedBy: "human" as const,
-            },
-          ];
-        });
-        onAttach({
-          tagName: actionMeta.name,
-          tagId: actionMeta.id,
-        });
-        break;
-      }
-    }
-  };
-
   const createTag = () => {
     if (!inputValue.trim()) return;
-    onChange({ action: "create-option", name: inputValue.trim() });
+    runAttach(inputValue.trim());
     setInputValue("");
   };
 
@@ -238,39 +258,30 @@ export function TagsEditor({
     } else if (
       e.key === "Backspace" &&
       !inputValue &&
-      optimisticTags.length > 0
+      displayedTags.length > 0
     ) {
-      const lastTag = optimisticTags.slice(-1)[0];
-      onChange({
-        action: "remove-value",
-        id: lastTag.id,
-        name: lastTag.name,
-      });
+      const lastTag = displayedTags[displayedTags.length - 1];
+      runDetach(lastTag);
     }
   };
 
   const handleSelect = (option: DisplayOption) => {
     if (option.isCreateOption) {
-      onChange({ action: "create-option", name: option.name });
+      runAttach(option.name);
       setInputValue("");
       inputRef.current?.focus();
       return;
     }
 
-    // If already selected, remove it
-    if (selectedValues.includes(option.id)) {
-      onChange({
-        action: "remove-value",
-        id: option.id,
-        name: option.name,
-      });
+    const existingChip = displayedTags.find(
+      (tag) =>
+        tagCaseInsensitiveKey(tag.name) === tagCaseInsensitiveKey(option.name),
+    );
+
+    if (existingChip) {
+      runDetach(existingChip);
     } else {
-      // Add the new tag
-      onChange({
-        action: "select-option",
-        id: option.id,
-        name: option.name,
-      });
+      runAttach(option.name, option.id);
     }
 
     // Reset input and keep focus
@@ -298,7 +309,7 @@ export function TagsEditor({
           defaultValue: "Search tags...",
         }));
   const visiblePlaceholder =
-    optimisticTags.length === 0 ? inputPlaceholder : undefined;
+    displayedTags.length === 0 ? inputPlaceholder : undefined;
   // Cap the input's rendered width in `ch` units regardless of how long the
   // typed text is. This container is the Popover's `PopoverTrigger` anchor,
   // and is `flex flex-wrap`: an uncapped width let a long enough tag name
@@ -331,9 +342,9 @@ export function TagsEditor({
                 isDisabled && "cursor-not-allowed opacity-50",
               )}
             >
-              {optimisticTags.length > 0 && (
+              {displayedTags.length > 0 && (
                 <>
-                  {optimisticTags.map((tag) => (
+                  {displayedTags.map((tag) => (
                     <div
                       key={tag.id}
                       className={cn(
@@ -341,6 +352,7 @@ export function TagsEditor({
                         tag.attachedBy == "ai"
                           ? "bg-k-accent text-k-accent-fg"
                           : "border-k-border bg-k-surface-1 text-k-fg border",
+                        tag.pending && "opacity-60",
                       )}
                     >
                       <div className="m-auto flex min-w-0 gap-2">
@@ -362,14 +374,21 @@ export function TagsEditor({
                         {!isDisabled && (
                           <button
                             type="button"
-                            className="rounded-full outline-none ring-offset-background focus:ring-1 focus:ring-ring focus:ring-offset-2"
+                            // A pending attach has no server tag id yet, so
+                            // there is nothing valid to detach — disable
+                            // rather than queue, since the attach normally
+                            // settles in well under a second and a disabled
+                            // `x` is simpler than a second queued-op type.
+                            disabled={tag.pending}
+                            aria-label={
+                              tag.pending
+                                ? `${tag.name} (saving…)`
+                                : `Remove ${tag.name}`
+                            }
+                            className="rounded-full outline-none ring-offset-background focus:ring-1 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                             onClick={(e) => {
                               e.stopPropagation();
-                              onChange({
-                                action: "remove-value",
-                                id: tag.id,
-                                name: tag.name,
-                              });
+                              runDetach(tag);
                             }}
                           >
                             <X className="h-3 w-3" />
@@ -425,7 +444,9 @@ export function TagsEditor({
               ) : (
                 <CommandGroup>
                   {displayedOptions.map((option) => {
-                    const isSelected = selectedValues.includes(option.id);
+                    const isSelected = selectedKeys.has(
+                      tagCaseInsensitiveKey(option.name),
+                    );
                     return (
                       <CommandItem
                         key={

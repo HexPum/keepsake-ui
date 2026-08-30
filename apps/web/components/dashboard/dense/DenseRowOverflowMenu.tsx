@@ -3,16 +3,19 @@
 import { useState } from "react";
 import DeleteBookmarkConfirmationDialog from "@/components/dashboard/bookmarks/DeleteBookmarkConfirmationDialog";
 import { EditBookmarkDialog } from "@/components/dashboard/bookmarks/EditBookmarkDialog";
+import { DenseManageListsDialog } from "@/components/dashboard/dense/lists/DenseManageListsDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useClientConfig } from "@/lib/clientConfig";
 import {
   Archive,
   ArchiveRestore,
   ExternalLink,
+  ListPlus,
   MoreHorizontal,
   Sparkles,
   Tag,
@@ -44,6 +47,8 @@ export function DenseRowOverflowMenu({
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [listsOpen, setListsOpen] = useState(false);
+  const demoMode = !!useClientConfig().demoMode;
 
   const onError = () => toast.error("Something went wrong");
 
@@ -68,6 +73,11 @@ export function DenseRowOverflowMenu({
         bookmark={bookmark}
         open={deleteOpen}
         setOpen={setDeleteOpen}
+      />
+      <DenseManageListsDialog
+        bookmarkId={bookmark.id}
+        open={listsOpen}
+        onOpenChange={setListsOpen}
       />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
@@ -114,6 +124,13 @@ export function DenseRowOverflowMenu({
           <DropdownMenuItem onClick={() => setEditOpen(true)}>
             <Tag className="mr-2 size-4" />
             Edit tags
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={demoMode}
+            onClick={() => setListsOpen(true)}
+          >
+            <ListPlus className="mr-2 size-4" />
+            Add to list
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={isResummarising}

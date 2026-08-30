@@ -181,8 +181,16 @@ export function useUpdateBookmarkTags(
   return useMutation(
     api.bookmarks.updateTags.mutationOptions({
       ...opts,
-      onSuccess: (res, req, meta, context) => {
-        queryClient.invalidateQueries(
+      onSuccess: async (res, req, meta, context) => {
+        // Awaited (not fire-and-forget): TagsEditor's pending-op settlement
+        // (apps/web/lib/dense/useTagPendingOps.ts) is server-state-driven —
+        // it clears a pending attach/detach once `getBookmark`'s tags
+        // reflect it, not the instant this mutation resolves. If this
+        // promise weren't awaited/returned, `mutateAsync` could resolve
+        // before the refetch this triggers had landed, and every caller
+        // that awaits it (including that settlement's error-fallback path)
+        // would see stale tags for that gap.
+        await queryClient.invalidateQueries(
           api.bookmarks.getBookmark.queryFilter({ bookmarkId: req.bookmarkId }),
         );
 

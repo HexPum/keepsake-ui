@@ -7,6 +7,7 @@ import {
   FavouritedActionIcon,
 } from "@/components/dashboard/bookmarks/icons";
 import { DenseRowOverflowMenu } from "@/components/dashboard/dense/DenseRowOverflowMenu";
+import { DenseManageListsDialog } from "@/components/dashboard/dense/lists/DenseManageListsDialog";
 import { SummaryAspectText } from "@/components/dashboard/dense/SummaryAspectText";
 import { AssetContentSection } from "@/components/dashboard/preview/AssetContentSection";
 import AttachmentBox from "@/components/dashboard/preview/AttachmentBox";
@@ -26,7 +27,7 @@ import { formatSavedAgo } from "@/lib/dense/format";
 import { parseSummary } from "@/lib/dense/summary";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, RefreshCw, X } from "lucide-react";
+import { ChevronRight, ListPlus, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -105,6 +106,7 @@ export default function DenseBookmarkDetail({
   // content) — always collapsed to start, per the design.
   const [attachmentsOpen, setAttachmentsOpen] = useState(false);
   const [tagEditorOpen, setTagEditorOpen] = useState(false);
+  const [listsOpen, setListsOpen] = useState(false);
 
   const { data: bookmark } = useQuery(
     api.bookmarks.getBookmark.queryOptions(
@@ -125,6 +127,10 @@ export default function DenseBookmarkDetail({
   // so an ungated button is an offer the server cannot honour — it failed with
   // a generic "Something went wrong" that named neither the cause nor the fix.
   const inferenceConfigured = useClientConfig().inference.isConfigured;
+  // Mirrors TagsEditor's own demoMode gate — the row overflow menu's "Add
+  // to list" item already disables under demoMode, and this topbar button
+  // must not be a second, ungated path to the same mutation.
+  const demoMode = !!useClientConfig().demoMode;
 
   const onError = () => toast.error("Something went wrong");
   const { mutate: updateBookmark, isPending: isUpdating } = useUpdateBookmark({
@@ -176,6 +182,11 @@ export default function DenseBookmarkDetail({
 
   return (
     <div className="bg-k-bg flex h-full flex-col">
+      <DenseManageListsDialog
+        bookmarkId={bookmark.id}
+        open={listsOpen}
+        onOpenChange={setListsOpen}
+      />
       {/* Sticky rather than merely flex-none: in the dialog this sits above
           a scrolling body, but on the full-page route `<main>` is the
           scroller, and without this the actions would scroll away. */}
@@ -227,6 +238,15 @@ export default function DenseBookmarkDetail({
             strokeWidth={1.75}
           />
         </button>
+        <button
+          type="button"
+          aria-label="Add to list"
+          disabled={!isOwner || demoMode}
+          onClick={() => setListsOpen(true)}
+          className={ACTION_ICON}
+        >
+          <ListPlus size={16} strokeWidth={1.75} />
+        </button>
 
         <button
           type="button"
@@ -271,7 +291,26 @@ export default function DenseBookmarkDetail({
         <div className="flex max-w-[600px] flex-col gap-[22px] px-[34px] pb-[18px] pt-[26px]">
           <div className="flex flex-col gap-[10px]">
             <p className="font-k-mono text-k-fg-dim text-[11px]">
-              {sourceUrl && <>{displayUrl(sourceUrl)} · </>}
+              {sourceUrl && (
+                <>
+                  <a
+                    href={sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    // The only row-navigation guard in this fork
+                    // (shouldIgnoreRowClick, lib/dense/useRowNavigate.ts)
+                    // works by walking up to the nearest `a`/`button`, so
+                    // there's no live bug this is fixing today — but it's
+                    // cheap insurance if the detail is ever embedded in a
+                    // clickable container.
+                    onClick={(e) => e.stopPropagation()}
+                    className="hover:text-k-fg-soft hover:underline"
+                  >
+                    {displayUrl(sourceUrl)}
+                  </a>{" "}
+                  ·{" "}
+                </>
+              )}
               {formatSavedAgo(bookmark.createdAt)}
               {readingMinutes && <> · {readingMinutes} min read</>}
             </p>
