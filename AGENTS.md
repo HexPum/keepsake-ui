@@ -9,28 +9,57 @@ This document provides context about the Keepsake project for the different agen
 > hand-edit it, just let it get committed if it changes. `apps/web/CLAUDE.md`
 > is a one-line `@AGENTS.md` import stub, not a duplicate of this file.
 
-## Working with Codex (the primary coder)
+## Working with Codex (architect) and Claude (executor)
 
-This repo is driven by two agent systems, and **Codex is the primary coder**:
-it plans, implements, tests, and reviews its own work end-to-end (full
-review responsibility, not just execution). Claude Code runs the structured
-pipeline (`/ship`, `/exterminate`, the subagents under `.claude/agents/`) as
-the **review-gate / second opinion and budget-fallback** — use it when a
-task genuinely needs the formal pipeline, or when Codex hits its rate limit.
-The Raycast assistant acts as dispatcher and verifier: it hands out the
-prompts and checks results, it does not implement.
+Two-agent split of labour, by design:
 
-Why Codex leads: on this account Codex delivers equal-or-better code quality
-with far fewer tokens per task. Claude's `/ship` pipeline burns budget fast
-through fixed over-serialized stages (planner/coder/tester/reviewer each
-re-reading the repo), verbose per-agent context, repeated `.claude/pipeline/`
-doc writing, and idle agent retries when rate-limited (429). Keep Claude
-usage lean: single-pass prompts with all context inline, minimal subagents,
-no retries, no exploratory phases.
+- **Codex is the architect.** It does the thinking: research, planning,
+  task decomposition, review of every diff, and verification. It writes
+  plans so precise that execution needs zero reasoning. Codex has full
+  machine authority on this machine (`sandbox_mode = "danger-full-access"`,
+  `approval_policy = "on-request"`): pnpm, docker, git worktrees, dev
+  servers, browser tooling — anything, without prompting.
+- **Claude is the executor.** It receives Codex's plan as a concrete,
+  step-by-step implementation spec (exact files, exact changes, exact
+  commands, exact tests) and applies it. Claude does NOT explore, does NOT
+  plan, does NOT retry on failure — it follows the spec and reports back.
+  This is deliberate token discipline: Claude's `/ship` pipeline burns
+  budget fast through fixed over-serialized stages, verbose per-agent
+  context, repeated `.claude/pipeline/` doc writing, and idle 429 retries.
+  A Claude executor prompt is single-pass: full plan inline, minimal
+  subagents, no exploratory phases, abort-and-report on any surprise.
+- **The Raycast assistant dispatches and verifies**: hands prompts to the
+  right agent, checks `git status`/rollouts/tests, commits docs. It does
+  not implement.
+
+Handoff format Codex → Claude (every plan must contain):
+1. Goal + success criteria (how we know it's done).
+2. Exact file paths to create/edit, with the intended change per file.
+3. Exact commands to run (install/build/test), in order.
+4. Exact test files that must pass, and what to do if one fails (report,
+   do not improvise).
+5. Out-of-scope list (things Claude must NOT touch).
+
+Codex as architect also reviews Claude's execution: after Claude commits,
+Codex runs `codex review` (or a spawn_agent review pass) against the diff
+and confirms the spec was followed. That is the gate — Claude never
+self-certifies.
+
+Browser isolation (both agents): agents must drive their OWN headless
+browser for verification (`codex` browser_use spawns its own instance;
+`browser_use_external` is disabled globally). Never attach to, read, or
+script the user's personal browser — no shared cookies, sessions, or tabs.
+For sandboxed agent runs, browser access happens inside the agent's own
+container/headless instance only.
+
+Sandboxed execution lane (planned, not yet wired): heavy Claude executor
+runs and any untrusted/parallel work go through a dockerized sandbox
+(Sandcastle-style: isolated container, mounted worktree, no access to the
+host beyond the repo) so an executor can be given a task without touching
+the host machine. Until that lane is set up, Claude runs with its normal
+restricted permissions in a dedicated `git worktree` only.
 
 Codex-specific rules (good practice for any agent):
-
-Rules that apply to Codex specifically (and are good practice for any agent):
 
 - **One working tree per task.** Never run a second agent (Codex or Claude)
   in the same dirty tree as another run. Check `git status --short` first;
