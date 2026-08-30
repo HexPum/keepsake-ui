@@ -9,12 +9,26 @@ This document provides context about the Keepsake project for the different agen
 > hand-edit it, just let it get committed if it changes. `apps/web/CLAUDE.md`
 > is a one-line `@AGENTS.md` import stub, not a duplicate of this file.
 
-## Working with Codex (the second coder)
+## Working with Codex (the primary coder)
 
-This repo is driven by two agent systems. Claude Code runs the structured
-pipeline (`/ship`, `/exterminate`, the subagents under `.claude/agents/`).
-**Codex is the second coder** — a single, capable agent used for direct,
-unattended execution, recovery work, and cross-checks. Both read this file.
+This repo is driven by two agent systems, and **Codex is the primary coder**:
+it plans, implements, tests, and reviews its own work end-to-end (full
+review responsibility, not just execution). Claude Code runs the structured
+pipeline (`/ship`, `/exterminate`, the subagents under `.claude/agents/`) as
+the **review-gate / second opinion and budget-fallback** — use it when a
+task genuinely needs the formal pipeline, or when Codex hits its rate limit.
+The Raycast assistant acts as dispatcher and verifier: it hands out the
+prompts and checks results, it does not implement.
+
+Why Codex leads: on this account Codex delivers equal-or-better code quality
+with far fewer tokens per task. Claude's `/ship` pipeline burns budget fast
+through fixed over-serialized stages (planner/coder/tester/reviewer each
+re-reading the repo), verbose per-agent context, repeated `.claude/pipeline/`
+doc writing, and idle agent retries when rate-limited (429). Keep Claude
+usage lean: single-pass prompts with all context inline, minimal subagents,
+no retries, no exploratory phases.
+
+Codex-specific rules (good practice for any agent):
 
 Rules that apply to Codex specifically (and are good practice for any agent):
 
@@ -69,6 +83,37 @@ Rules that apply to Codex specifically (and are good practice for any agent):
   "config.toml parse ok"; `codex features list | grep multi_agent_v2` must
   show `true`. Session rollouts under `~/.codex/sessions/` record per-thread
   model + effort (check a sub-agent's `turn_context` if unsure what ran).
+
+  Setup pitfalls learned while enabling multi-agent (2026-08-30), so they are
+  never repeated:
+  - Never put subagent keys under `[features.multi_agent_v2]` — it collides
+    with the boolean feature key (`duplicate key` TOML error), and
+    `enabled = true` inside the inline table fails with
+    `data did not match any variant of untagged enum FeatureToml`. Subagent
+    defaults belong ONLY in `[orchestrator]`; the feature is enabled ONLY as
+    `multi_agent_v2 = true` inside `[features]`.
+  - `gpt-5.6-luna` rejects `reasoning_effort = "minimal"` with an API 400.
+    Luna supports `none|low|medium|high|xhigh|max`; `ultra` is sol/terra-only.
+  - `codex exec` ignores `approval_policy` from profiles and runs with
+    `never` — always pass `-s read-only` for check/research runs.
+  - When verifying what a subagent actually ran, read the subagent's own
+    rollout file's `turn_context` (model/effort/sandbox), not the parent's.
+  - `codex doctor` accepts `--strict-config` only before the subcommand
+    (`codex --strict-config doctor`), and `-p/--profile` is not a `doctor`
+    flag — verify profiles by running a cheap `codex exec --profile keepsake`
+    task instead.
+
+### Codex self-review workflow (replaces the Claude gate for Codex work)
+
+For every non-trivial task Codex runs the full loop itself:
+plan → implement → run relevant tests + `pnpm preflight` → **self-review
+pass** (`codex review`, or spawn a review subagent with a higher-effort
+model — e.g. terra medium/high — that reviews the diff against the task's
+success criteria) → fix findings → only then commit by exact path. Findings
+worth remembering go into `MISTAKES.md` in the same turn. A human (or the
+Raycast dispatcher) still verifies the final state before merge/deploy;
+Codex self-review replaces the *pipeline* gate, not human judgment on the
+design mission.
 
 
 ## What this is
