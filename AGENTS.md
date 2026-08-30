@@ -38,6 +38,39 @@ Rules that apply to Codex specifically (and are good practice for any agent):
   `implementation-log.md` / `review.md` first and prefer committing /
   reporting over rewriting.
 
+### Codex setup on this machine (verified 2026-08-30, CLI 0.151.0)
+
+- **Interactive/profile use:** `cd /Users/rrosenzopf/keepsake-ui && codex -p keepsake`
+  (profile file: `~/.codex/keepsake.config.toml`; inherits `approval_policy =
+  "on-request"` and `sandbox_mode = "workspace-write"` from
+  `~/.codex/config.toml`).
+- **Non-interactive runs:** `codex exec --profile keepsake ...`. Note: `exec`
+  defaults to `approval_policy = "never"`; pair it with `-s read-only` for
+  checks/research, or rely on the profile's `workspace-write` sandbox for
+  edits. Destructive or network actions still require the user.
+- **Sub-agents (`spawn_agent`, multi-agent v2):** enabled globally via
+  `features.multi_agent_v2 = true` in `~/.codex/config.toml`. Defaults set in
+  `[orchestrator]` (both global config and the keepsake profile):
+  `default_subagent_model = "gpt-5.6-luna"`,
+  `default_subagent_reasoning_effort = "low"`,
+  `max_concurrent_threads_per_session = 3`.
+  - Luna = fast/affordable tier: scouts, test runs, narrow single-file edits.
+  - Raise model/effort per spawn in the prompt for hard sub-tasks; do NOT
+    raise the `[orchestrator]` defaults.
+  - Concurrency cap of 3 is deliberate — fan-out burns the plan's rate
+    limit fastest. Never ask Codex to spawn agents that all edit the same
+    tree; sub-agents inherit this file's one-tree-per-task rule.
+- **Model tiers available:** `gpt-5.6-sol` (frontier, default effort low),
+  `gpt-5.6-terra` (balanced, default medium), `gpt-5.6-luna` (fast/cheap,
+  default medium; supports efforts low..max, NOT "minimal" or "ultra").
+  Valid effort values: `none`, `low`, `medium`, `high`, `xhigh`, `max`,
+  `ultra` (sol/terra only).
+- **Verification commands:** `codex --strict-config doctor` must show
+  "config.toml parse ok"; `codex features list | grep multi_agent_v2` must
+  show `true`. Session rollouts under `~/.codex/sessions/` record per-thread
+  model + effort (check a sub-agent's `turn_context` if unsure what ran).
+
+
 ## What this is
 
 Keepsake is a **UI fork** of [Karakeep](https://github.com/karakeep-app/karakeep)
