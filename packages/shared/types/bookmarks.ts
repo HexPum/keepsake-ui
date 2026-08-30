@@ -302,12 +302,22 @@ export const zGetBookmarksRequestSchema = z.object({
   useCursorV2: z.boolean().optional(),
   sortOrder: zSortOrder.exclude(["relevance"]).optional().default("desc"),
   includeContent: z.boolean().optional().default(false),
+  // Opt-in: when true, the response also includes totalCount and
+  // unsummarisedCount for the filtered collection (not just the loaded
+  // page). Deliberately NOT `.optional().default(false)` — this schema's
+  // inferred type is used as a prop type (`ZGetBookmarksRequest`) elsewhere,
+  // and a defaulted field becomes required there. Treat `undefined` as
+  // `false` at every call site instead.
+  includeCounts: z.boolean().optional(),
 });
 export type ZGetBookmarksRequest = z.infer<typeof zGetBookmarksRequestSchema>;
 
 export const zGetBookmarksResponseSchema = z.object({
   bookmarks: z.array(zBookmarkSchema),
   nextCursor: zCursorV2.nullable(),
+  // Present iff the request set includeCounts: true.
+  totalCount: z.number().optional(),
+  unsummarisedCount: z.number().optional(),
 });
 export type ZGetBookmarksResponse = z.infer<typeof zGetBookmarksResponseSchema>;
 

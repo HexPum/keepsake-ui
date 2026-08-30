@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatRelativeSince } from "@/lib/dense/format";
+import { resolveHeaderCounts } from "@/lib/dense/headerCounts";
 import {
   ACCENTS,
   FONT_PAIRINGS,
@@ -131,6 +132,7 @@ export default function DenseFilesView({
     ...query,
     sortOrder: resolvedSortOrder,
     includeContent: false,
+    includeCounts: true,
   };
 
   // The server prefetch in DenseFiles.tsx doesn't pass a sortOrder, so it is
@@ -248,9 +250,21 @@ export default function DenseFilesView({
   // `success | failure | pending | null`, and `null` means "never queued" —
   // which is every bookmark on a server with no AI configured, so counting
   // anything-but-success reported "24 items · 24 unsummarised" forever.
-  const unsummarisedCount = bookmarks.filter(
+  const loadedUnsummarisedCount = bookmarks.filter(
     (b) => b.summarizationStatus === "pending",
   ).length;
+  // The header total/unsummarised numbers come from the SSR-seeded first
+  // page's collection-wide counts (see headerCounts.ts), not the loaded
+  // rows — this is what keeps the number stable while paginating. The
+  // fallback to loaded-derived numbers only kicks in when there is no
+  // server-seeded page yet (e.g. a non-default sort order) or the server
+  // didn't answer with counts.
+  const { total: totalCount, unsummarised: unsummarisedCount } =
+    resolveHeaderCounts({
+      firstPage: data?.pages[0],
+      loadedCount: bookmarks.length,
+      loadedUnsummarisedCount,
+    });
   const mostRecentModified = bookmarks.reduce<Date | null>((acc, b) => {
     const candidate = b.modifiedAt ?? b.createdAt;
     if (!acc || candidate > acc) return candidate;
@@ -289,7 +303,7 @@ export default function DenseFilesView({
                   </>
                 ) : (
                   <>
-                    {bookmarks.length} item{bookmarks.length === 1 ? "" : "s"} ·{" "}
+                    {totalCount} item{totalCount === 1 ? "" : "s"} ·{" "}
                     {unsummarisedCount} unsummarised
                     {mounted && mostRecentModified && (
                       <> · updated {formatRelativeSince(mostRecentModified)}</>

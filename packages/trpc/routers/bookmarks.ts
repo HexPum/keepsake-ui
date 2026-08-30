@@ -1228,6 +1228,15 @@ export const bookmarksAppRouter = router({
       return {
         bookmarks: res.bookmarks.map((b) => b.asZBookmark()),
         nextCursor: res.nextCursor,
+        // Only include when requested, and only when loadMulti actually
+        // produced them — never emit undefined-valued keys, so clients that
+        // don't opt in get a byte-identical payload.
+        ...(res.totalCount !== undefined && res.unsummarisedCount !== undefined
+          ? {
+              totalCount: res.totalCount,
+              unsummarisedCount: res.unsummarisedCount,
+            }
+          : {}),
       };
     }),
 

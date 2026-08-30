@@ -1055,6 +1055,374 @@ describe("Bookmark Routes", () => {
     await validateWithLimit(100);
   });
 
+  describe("getBookmarks — includeCounts", () => {
+    test<CustomTestContext>("omits totalCount/unsummarisedCount entirely unless requested", async ({
+      apiCallers,
+    }) => {
+      const api = apiCallers[0].bookmarks;
+      await api.createBookmark({
+        url: "https://count-default.com",
+        type: BookmarkTypes.LINK,
+      });
+      const res = await api.getBookmarks({});
+      expect(res).not.toHaveProperty("totalCount");
+      expect(res).not.toHaveProperty("unsummarisedCount");
+    });
+
+    test<CustomTestContext>("totalCount reflects the whole collection, not the loaded page, and is stable across pages and sort order", async ({
+      apiCallers,
+      db,
+    }) => {
+      const user = await apiCallers[0].users.whoami();
+      const values = Array.from({ length: 25 }, (_, i) => ({
+        userId: user.id,
+        type: BookmarkTypes.TEXT as const,
+        createdAt: new Date(1_000_000 + i * 1000),
+      }));
+      await db.insert(bookmarks).values(values);
+
+      const page1 = await apiCallers[0].bookmarks.getBookmarks({
+        limit: 20,
+        includeCounts: true,
+        useCursorV2: true,
+      });
+      expect(page1.bookmarks.length).toBe(20);
+      expect(page1.totalCount).toBe(25);
+
+      const page2 = await apiCallers[0].bookmarks.getBookmarks({
+        limit: 20,
+        cursor: page1.nextCursor,
+        includeCounts: true,
+        useCursorV2: true,
+      });
+      expect(page2.bookmarks.length).toBe(5);
+      expect(page2.totalCount).toBe(25);
+
+      const descRes = await apiCallers[0].bookmarks.getBookmarks({
+        limit: 20,
+        sortOrder: "desc",
+        includeCounts: true,
+      });
+      expect(descRes.totalCount).toBe(25);
+
+      const ascRes = await apiCallers[0].bookmarks.getBookmarks({
+        limit: 20,
+        sortOrder: "asc",
+        includeCounts: true,
+      });
+      expect(ascRes.totalCount).toBe(25);
+    });
+
+    test<CustomTestContext>("totalCount/unsummarisedCount respect the same filters as the page query (archived, favourited, tagId, manual listId, smart listId, rssFeedId)", async ({
+      apiCallers,
+      db,
+    }) => {
+      const user = await apiCallers[0].users.whoami();
+
+      // Ground truth is derived from these specs with plain array
+      // filters below, rather than hand-computed numbers, so the
+      // expectations can't silently drift from the fixture.
+      const statuses = [
+        "pending",
+        "success",
+        "failure",
+        "skipped",
+        null,
+      ] as const;
+      const specs = Array.from({ length: 25 }, (_, i) => ({
+        archived: i % 3 === 0,
+        favourited: i % 4 === 0,
+        summarizationStatus: statuses[i % statuses.length],
+      }));
+
+      const inserted = await db
+        .insert(bookmarks)
+        .values(
+          specs.map((s, i) => ({
+            userId: user.id,
+            type: BookmarkTypes.TEXT as const,
+            createdAt: new Date(1_000_000 + i * 1000),
+            archived: s.archived,
+            favourited: s.favourited,
+            summarizationStatus: s.summarizationStatus,
+          })),
+        )
+        .returning();
+
+      const expectedArchivedTrue = specs.filter((s) => s.archived).length;
+      const expectedArchivedFalse = specs.filter((s) => !s.archived).length;
+      const expectedFavourited = specs.filter((s) => s.favourited).length;
+      const expectedPendingOverall = specs.filter(
+        (s) => s.summarizationStatus === "pending",
+      ).length;
+      const expectedPendingArchivedFalse = specs.filter(
+        (s) => !s.archived && s.summarizationStatus === "pending",
+      ).length;
+
+      // Sanity-check the fixture actually distinguishes matching from
+      // non-matching rows, otherwise a filter-ignoring bug would pass.
+      expect(expectedArchivedTrue).toBeGreaterThan(0);
+      expect(expectedArchivedFalse).toBeGreaterThan(0);
+      expect(expectedArchivedTrue).not.toBe(expectedArchivedFalse);
+
+      const archivedTrueRes = await apiCallers[0].bookmarks.getBookmarks({
+        archived: true,
+        limit: 3,
+        includeCounts: true,
+      });
+      expect(archivedTrueRes.bookmarks.length).toBe(3);
+      expect(archivedTrueRes.totalCount).toBe(expectedArchivedTrue);
+
+      const archivedFalseRes = await apiCallers[0].bookmarks.getBookmarks({
+        archived: false,
+        limit: 3,
+        includeCounts: true,
+      });
+      expect(archivedFalseRes.totalCount).toBe(expectedArchivedFalse);
+      expect(archivedFalseRes.unsummarisedCount).toBe(
+        expectedPendingArchivedFalse,
+      );
+
+      const favRes = await apiCallers[0].bookmarks.getBookmarks({
+        favourited: true,
+        limit: 3,
+        includeCounts: true,
+      });
+      expect(favRes.totalCount).toBe(expectedFavourited);
+
+      const overallRes = await apiCallers[0].bookmarks.getBookmarks({
+        limit: 3,
+        includeCounts: true,
+      });
+      expect(overallRes.unsummarisedCount).toBe(expectedPendingOverall);
+
+      // tagId
+      const tagId = await createTestTag(apiCallers[0], "countTag");
+      const taggedIds = inserted.slice(0, 5).map((b) => b.id);
+      for (const bookmarkId of taggedIds) {
+        await apiCallers[0].bookmarks.updateTags({
+          bookmarkId,
+          attach: [{ tagId }],
+          detach: [],
+        });
+      }
+      const tagRes = await apiCallers[0].bookmarks.getBookmarks({
+        tagId,
+        limit: 2,
+        includeCounts: true,
+      });
+      expect(tagRes.totalCount).toBe(taggedIds.length);
+
+      // manual listId
+      const manualList = await apiCallers[0].lists.create({
+        name: "Count Manual List",
+        type: "manual",
+        icon: "📚",
+      });
+      const manualListIds = inserted.slice(5, 12).map((b) => b.id);
+      for (const bookmarkId of manualListIds) {
+        await apiCallers[0].lists.addToList({
+          listId: manualList.id,
+          bookmarkId,
+        });
+      }
+      const manualListRes = await apiCallers[0].bookmarks.getBookmarks({
+        listId: manualList.id,
+        limit: 3,
+        includeCounts: true,
+      });
+      expect(manualListRes.totalCount).toBe(manualListIds.length);
+
+      // smart listId — exercises the `ids` code path (smart lists are
+      // expanded to an ids array and fall through to the plain path).
+      const smartList = await apiCallers[0].lists.create({
+        name: "Count Smart List",
+        type: "smart",
+        query: "is:fav",
+        icon: "📚",
+      });
+      const smartListRes = await apiCallers[0].bookmarks.getBookmarks({
+        listId: smartList.id,
+        limit: 3,
+        includeCounts: true,
+      });
+      expect(smartListRes.totalCount).toBe(expectedFavourited);
+
+      // rssFeedId
+      const feedId = await createTestFeed(
+        apiCallers[0],
+        "Count Feed",
+        "https://count-feed.com",
+      );
+      const feedIds = inserted.slice(12, 15).map((b) => b.id);
+      await db.insert(rssFeedImportsTable).values(
+        feedIds.map((bookmarkId, i) => ({
+          rssFeedId: feedId,
+          entryId: `count-entry-${i}`,
+          bookmarkId,
+        })),
+      );
+      const rssRes = await apiCallers[0].bookmarks.getBookmarks({
+        rssFeedId: feedId,
+        limit: 2,
+        includeCounts: true,
+      });
+      expect(rssRes.totalCount).toBe(feedIds.length);
+    });
+
+    test<CustomTestContext>("counts are 0 (not omitted) for an empty collection and an empty smart list", async ({
+      apiCallers,
+    }) => {
+      const emptyRes = await apiCallers[0].bookmarks.getBookmarks({
+        includeCounts: true,
+      });
+      expect(emptyRes.totalCount).toBe(0);
+      expect(typeof emptyRes.totalCount).toBe("number");
+      expect(emptyRes.unsummarisedCount).toBe(0);
+      expect(typeof emptyRes.unsummarisedCount).toBe("number");
+
+      const emptySmartList = await apiCallers[0].lists.create({
+        name: "Empty Smart List",
+        type: "smart",
+        query: "#no-such-tag-xyz",
+        icon: "📚",
+      });
+      const emptySmartRes = await apiCallers[0].bookmarks.getBookmarks({
+        listId: emptySmartList.id,
+        includeCounts: true,
+      });
+      expect(emptySmartRes.totalCount).toBe(0);
+      expect(typeof emptySmartRes.totalCount).toBe("number");
+      expect(emptySmartRes.unsummarisedCount).toBe(0);
+      expect(typeof emptySmartRes.unsummarisedCount).toBe("number");
+    });
+
+    test<CustomTestContext>("includeCounts: false behaves exactly like omitting the field", async ({
+      apiCallers,
+    }) => {
+      const api = apiCallers[0].bookmarks;
+      await api.createBookmark({
+        url: "https://count-explicit-false.com",
+        type: BookmarkTypes.LINK,
+      });
+      const res = await api.getBookmarks({ includeCounts: false });
+      expect(res).not.toHaveProperty("totalCount");
+      expect(res).not.toHaveProperty("unsummarisedCount");
+    });
+
+    test<CustomTestContext>("counts never leak across users — access control, not a bare COUNT(*)", async ({
+      apiCallers,
+    }) => {
+      // Owner has 3 bookmarks, a second unrelated user has 7. The owner's
+      // plain-path totalCount must be 3, not 10 — a query that dropped the
+      // per-path userId predicate for the count (but kept it for the page
+      // query) would only be caught by comparing against another user's data.
+      for (let i = 0; i < 3; i++) {
+        await apiCallers[0].bookmarks.createBookmark({
+          url: `https://owner-count-${i}.com`,
+          type: BookmarkTypes.LINK,
+        });
+      }
+      for (let i = 0; i < 7; i++) {
+        await apiCallers[1].bookmarks.createBookmark({
+          url: `https://other-user-count-${i}.com`,
+          type: BookmarkTypes.LINK,
+        });
+      }
+
+      const ownerRes = await apiCallers[0].bookmarks.getBookmarks({
+        includeCounts: true,
+      });
+      expect(ownerRes.totalCount).toBe(3);
+
+      const otherRes = await apiCallers[1].bookmarks.getBookmarks({
+        includeCounts: true,
+      });
+      expect(otherRes.totalCount).toBe(7);
+    });
+
+    test<CustomTestContext>("a collaborator viewing a shared manual list gets the list's own count, not the owner's whole collection", async ({
+      apiCallers,
+    }) => {
+      const ownerApi = apiCallers[0];
+      const collaboratorApi = apiCallers[1];
+
+      // Owner has bookmarks both inside and outside the shared list.
+      const inList = await Promise.all(
+        Array.from({ length: 4 }, (_, i) =>
+          ownerApi.bookmarks.createBookmark({
+            url: `https://shared-list-item-${i}.com`,
+            type: BookmarkTypes.LINK,
+          }),
+        ),
+      );
+      await Promise.all(
+        Array.from({ length: 6 }, (_, i) =>
+          ownerApi.bookmarks.createBookmark({
+            url: `https://owner-only-item-${i}.com`,
+            type: BookmarkTypes.LINK,
+          }),
+        ),
+      );
+
+      const list = await ownerApi.lists.create({
+        name: "Shared Count List",
+        icon: "📚",
+        type: "manual",
+      });
+      for (const bookmark of inList) {
+        await ownerApi.lists.addToList({
+          listId: list.id,
+          bookmarkId: bookmark.id,
+        });
+      }
+
+      const collaboratorUser = await collaboratorApi.users.whoami();
+      const { invitationId } = await ownerApi.lists.addCollaborator({
+        listId: list.id,
+        email: collaboratorUser.email!,
+        role: "viewer",
+      });
+      await collaboratorApi.lists.acceptInvitation({ invitationId });
+
+      const res = await collaboratorApi.bookmarks.getBookmarks({
+        listId: list.id,
+        includeCounts: true,
+      });
+      expect(res.totalCount).toBe(4);
+    });
+
+    test<CustomTestContext>("total is unaffected by a cursor pointing past the last page", async ({
+      apiCallers,
+      db,
+    }) => {
+      const user = await apiCallers[0].users.whoami();
+      const values = Array.from({ length: 5 }, (_, i) => ({
+        userId: user.id,
+        type: BookmarkTypes.TEXT as const,
+        createdAt: new Date(2_000_000 + i * 1000),
+      }));
+      await db.insert(bookmarks).values(values);
+
+      const page1 = await apiCallers[0].bookmarks.getBookmarks({
+        limit: 5,
+        includeCounts: true,
+        useCursorV2: true,
+      });
+      expect(page1.bookmarks.length).toBe(5);
+      expect(page1.nextCursor).toBeNull();
+
+      // Re-request with the same limit; there is nothing left to page
+      // through, but the total must still reflect the full collection.
+      const again = await apiCallers[0].bookmarks.getBookmarks({
+        limit: 5,
+        includeCounts: true,
+        useCursorV2: true,
+      });
+      expect(again.totalCount).toBe(5);
+    });
+  });
+
   test<CustomTestContext>("getBookmark", async ({ apiCallers }) => {
     const api = apiCallers[0].bookmarks;
     const createdBookmark = await api.createBookmark({

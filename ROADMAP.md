@@ -44,8 +44,6 @@ Small, well-understood, and mostly about finishing what 0.1 started.
 - **Real reading time.** The estimate is currently derived from summary length,
   which is not a meaningful number. Either compute it from article content or
   remove it.
-- **Accurate item counts.** The list header counts loaded items, not the
-  collection, because the API returns no total.
 - **Light theme**, if there is demand. The fork is deliberately dark-only today.
 
 ## Under consideration

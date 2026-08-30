@@ -12,6 +12,7 @@ import {
   lt,
   lte,
   or,
+  sql,
   SQL,
 } from "drizzle-orm";
 import invariant from "tiny-invariant";
@@ -434,9 +435,15 @@ export class Bookmark extends BareBookmark {
   ): Promise<{
     bookmarks: Bookmark[];
     nextCursor: ZCursor | null;
+    totalCount?: number;
+    unsummarisedCount?: number;
   }> {
     if (input.ids && input.ids.length == 0) {
-      return { bookmarks: [], nextCursor: null };
+      return {
+        bookmarks: [],
+        nextCursor: null,
+        ...(input.includeCounts ? { totalCount: 0, unsummarisedCount: 0 } : {}),
+      };
     }
     if (!input.limit) {
       // When loading by ids, callers expect all requested bookmarks back,
@@ -515,11 +522,29 @@ export class Bookmark extends BareBookmark {
 
     // Choose query strategy based on filters
     // Strategy: Use the most selective filter as the driving table
+    //
+    // `baseWhere` is the access-control + common-filter fragment for the
+    // selected path (no cursor, no limit, no order). It is built once and
+    // reused by both the page query (with the cursor condition appended)
+    // and the optional count query below, so the two are structurally
+    // incapable of drifting apart.
     let sq;
+    let baseWhere: SQL | undefined;
+    let countQuery:
+      | Promise<{ totalCount: number; unsummarisedCount: number }>
+      | undefined;
+
+    // A conditional SUM() returns NULL over zero rows in SQLite; coalesce
+    // to 0 so unsummarisedCount is always a number when counts are requested.
+    const unsummarisedCountExpr = sql<number>`COALESCE(SUM(CASE WHEN ${bookmarks.summarizationStatus} = 'pending' THEN 1 ELSE 0 END), 0)`;
 
     if (input.listId !== undefined) {
       // PATH: List filter - start from bookmarksInLists (more selective)
       // Access control is already verified by List.fromId() called above
+      baseWhere = and(
+        eq(bookmarksInLists.listId, input.listId),
+        ...buildCommonFilters(),
+      );
       sq = ctx.db.$with("bookmarksSq").as(
         ctx.db
           .select(getTableColumns(bookmarks))
@@ -527,16 +552,31 @@ export class Bookmark extends BareBookmark {
           .innerJoin(bookmarks, eq(bookmarks.id, bookmarksInLists.bookmarkId))
           .where(
             and(
-              eq(bookmarksInLists.listId, input.listId),
-              ...buildCommonFilters(),
+              baseWhere,
               buildCursorCondition(bookmarks.createdAt, bookmarks.id),
             ),
           )
           .limit(input.limit + 1)
           .orderBy(...buildOrderBy()),
       );
+      if (input.includeCounts) {
+        countQuery = ctx.db
+          .select({
+            totalCount: sql<number>`count(*)`,
+            unsummarisedCount: unsummarisedCountExpr,
+          })
+          .from(bookmarksInLists)
+          .innerJoin(bookmarks, eq(bookmarks.id, bookmarksInLists.bookmarkId))
+          .where(baseWhere)
+          .then(([row]) => row);
+      }
     } else if (input.tagId !== undefined) {
       // PATH: Tag filter - start from tagsOnBookmarks (more selective)
+      baseWhere = and(
+        eq(tagsOnBookmarks.tagId, input.tagId),
+        eq(bookmarks.userId, ctx.user.id), // Access control
+        ...buildCommonFilters(),
+      );
       sq = ctx.db.$with("bookmarksSq").as(
         ctx.db
           .select(getTableColumns(bookmarks))
@@ -544,17 +584,31 @@ export class Bookmark extends BareBookmark {
           .innerJoin(bookmarks, eq(bookmarks.id, tagsOnBookmarks.bookmarkId))
           .where(
             and(
-              eq(tagsOnBookmarks.tagId, input.tagId),
-              eq(bookmarks.userId, ctx.user.id), // Access control
-              ...buildCommonFilters(),
+              baseWhere,
               buildCursorCondition(bookmarks.createdAt, bookmarks.id),
             ),
           )
           .limit(input.limit + 1)
           .orderBy(...buildOrderBy()),
       );
+      if (input.includeCounts) {
+        countQuery = ctx.db
+          .select({
+            totalCount: sql<number>`count(*)`,
+            unsummarisedCount: unsummarisedCountExpr,
+          })
+          .from(tagsOnBookmarks)
+          .innerJoin(bookmarks, eq(bookmarks.id, tagsOnBookmarks.bookmarkId))
+          .where(baseWhere)
+          .then(([row]) => row);
+      }
     } else if (input.rssFeedId !== undefined) {
       // PATH: RSS feed filter - start from rssFeedImportsTable (more selective)
+      baseWhere = and(
+        eq(rssFeedImportsTable.rssFeedId, input.rssFeedId),
+        eq(bookmarks.userId, ctx.user.id), // Access control
+        ...buildCommonFilters(),
+      );
       sq = ctx.db.$with("bookmarksSq").as(
         ctx.db
           .select(getTableColumns(bookmarks))
@@ -565,47 +619,77 @@ export class Bookmark extends BareBookmark {
           )
           .where(
             and(
-              eq(rssFeedImportsTable.rssFeedId, input.rssFeedId),
-              eq(bookmarks.userId, ctx.user.id), // Access control
-              ...buildCommonFilters(),
+              baseWhere,
               buildCursorCondition(bookmarks.createdAt, bookmarks.id),
             ),
           )
           .limit(input.limit + 1)
           .orderBy(...buildOrderBy()),
       );
+      if (input.includeCounts) {
+        countQuery = ctx.db
+          .select({
+            totalCount: sql<number>`count(*)`,
+            unsummarisedCount: unsummarisedCountExpr,
+          })
+          .from(rssFeedImportsTable)
+          .innerJoin(
+            bookmarks,
+            eq(bookmarks.id, rssFeedImportsTable.bookmarkId),
+          )
+          .where(baseWhere)
+          .then(([row]) => row);
+      }
     } else {
       // PATH: No list/tag/rssFeed filter - query bookmarks directly
       // Uses composite index: bookmarks_userId_lastSavedAt_id_idx (or archived/favourited variants)
+      baseWhere = and(
+        eq(bookmarks.userId, ctx.user.id),
+        ...buildCommonFilters(),
+      );
       sq = ctx.db.$with("bookmarksSq").as(
         ctx.db
           .select()
           .from(bookmarks)
           .where(
             and(
-              eq(bookmarks.userId, ctx.user.id),
-              ...buildCommonFilters(),
+              baseWhere,
               buildCursorCondition(bookmarks.createdAt, bookmarks.id),
             ),
           )
           .limit(input.limit + 1)
           .orderBy(...buildOrderBy()),
       );
+      if (input.includeCounts) {
+        countQuery = ctx.db
+          .select({
+            totalCount: sql<number>`count(*)`,
+            unsummarisedCount: unsummarisedCountExpr,
+          })
+          .from(bookmarks)
+          .where(baseWhere)
+          .then(([row]) => row);
+      }
     }
 
-    // Execute the query with joins for related data
+    // Execute the page query and the (optional) count query concurrently.
+    // The count query omits the cursor condition, limit and orderBy — if it
+    // leaked in, the total would shrink as the user scrolls.
     // TODO: Consider not inlining the tags in the response of getBookmarks as this query is getting kinda expensive
-    const results = await ctx.db
-      .with(sq)
-      .select()
-      .from(sq)
-      .leftJoin(tagsOnBookmarks, eq(sq.id, tagsOnBookmarks.bookmarkId))
-      .leftJoin(bookmarkTags, eq(tagsOnBookmarks.tagId, bookmarkTags.id))
-      .leftJoin(bookmarkLinks, eq(bookmarkLinks.id, sq.id))
-      .leftJoin(bookmarkTexts, eq(bookmarkTexts.id, sq.id))
-      .leftJoin(bookmarkAssets, eq(bookmarkAssets.id, sq.id))
-      .leftJoin(assets, eq(assets.bookmarkId, sq.id))
-      .orderBy(desc(sq.createdAt), desc(sq.id));
+    const [results, counts] = await Promise.all([
+      ctx.db
+        .with(sq)
+        .select()
+        .from(sq)
+        .leftJoin(tagsOnBookmarks, eq(sq.id, tagsOnBookmarks.bookmarkId))
+        .leftJoin(bookmarkTags, eq(tagsOnBookmarks.tagId, bookmarkTags.id))
+        .leftJoin(bookmarkLinks, eq(bookmarkLinks.id, sq.id))
+        .leftJoin(bookmarkTexts, eq(bookmarkTexts.id, sq.id))
+        .leftJoin(bookmarkAssets, eq(bookmarkAssets.id, sq.id))
+        .leftJoin(assets, eq(assets.bookmarkId, sq.id))
+        .orderBy(desc(sq.createdAt), desc(sq.id)),
+      countQuery,
+    ]);
 
     const bookmarksRes = results.reduce<Record<string, ZBookmark>>(
       (acc, row) => {
@@ -802,6 +886,12 @@ export class Bookmark extends BareBookmark {
     return {
       bookmarks: bookmarksArr.map((b) => Bookmark.fromData(ctx, b)),
       nextCursor,
+      ...(input.includeCounts
+        ? {
+            totalCount: counts?.totalCount ?? 0,
+            unsummarisedCount: counts?.unsummarisedCount ?? 0,
+          }
+        : {}),
     };
   }
 

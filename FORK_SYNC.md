@@ -65,9 +65,13 @@ As of the 0.1.0 base, the fork's modified-file list breaks down like this:
   `summarizationStatus` schema and API surface
   (`packages/db/schema.ts`, `packages/shared/types/bookmarks.ts`,
   `packages/trpc/routers/admin.ts`, `packages/open-api/lib/admin.ts`,
-  `apps/cli/src/commands/admin.ts`). If upstream changes the same
-  functions, expect a real conflict, not a cosmetic one — read both sides
-  before resolving.
+  `apps/cli/src/commands/admin.ts`), plus `packages/trpc/routers/bookmarks.ts`
+  and `packages/trpc/models/bookmarks.ts`, which added optional `totalCount` /
+  `unsummarisedCount` fields to `getBookmarks` (behind an opt-in
+  `includeCounts` request flag) so the dense header meta line can show the
+  real size of the collection being viewed instead of the loaded page. If
+  upstream changes the same functions, expect a real conflict, not a
+  cosmetic one — read both sides before resolving.
 - **Fork-owned config** (`tailwind.config.ts`, `dense-theme.css`,
   `docker/docker-compose.yml`, `.github/workflows/docker.yml`). Upstream
   rarely touches these in fork-relevant ways, but when it does (a new

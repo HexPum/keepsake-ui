@@ -27,7 +27,10 @@ export default async function DenseFiles({
     redirect("/");
   }
 
-  const bookmarks = await api.bookmarks.getBookmarks({ ...query });
+  const bookmarks = await api.bookmarks.getBookmarks({
+    ...query,
+    includeCounts: true,
+  });
 
   return (
     <DenseFilesView
