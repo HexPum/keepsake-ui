@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { FavouritedActionIcon } from "@/components/dashboard/bookmarks/icons";
 import { useDenseThemeContext } from "@/components/dashboard/dense/DenseThemeController";
@@ -25,6 +26,22 @@ import { useTRPC } from "@karakeep/shared-react/trpc";
 import { ZBookmark } from "@karakeep/shared/types/bookmarks";
 
 import { DenseRowOverflowMenu } from "./DenseRowOverflowMenu";
+
+/**
+ * `formatCompactRelativeTime` is computed off `Date.now()`, so its output can
+ * tick over to a different value between SSR and hydration, producing a
+ * server/client text mismatch. Defer rendering it until after mount (SSR and
+ * the first client render both render nothing here, then the client fills in
+ * the real string) — same fix DenseFilesView's `useMounted` applies to
+ * `formatRelativeSince` for the identical class of bug.
+ */
+function useMounted() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  return mounted;
+}
 
 export function DenseBookmarkRow({
   bookmark: initialBookmark,
@@ -60,6 +77,7 @@ export function DenseBookmarkRow({
   const readingMinutes = estimateReadingTimeMinutes(bookmark.summary);
   const summary = summaryPreview(bookmark.summary);
   const navigate = useRowNavigate(`/dashboard/preview/${bookmark.id}`);
+  const mounted = useMounted();
 
   // A note snippet is only ever worth showing when it's *why* this row
   // matched — title/summary already surface their own matches in place, so
@@ -181,7 +199,7 @@ export function DenseBookmarkRow({
 
       <div className="relative z-10 flex flex-none flex-col items-end gap-[10px]">
         <span className="font-k-mono text-k-timestamp text-[11px]">
-          {formatCompactRelativeTime(bookmark.createdAt)}
+          {mounted ? formatCompactRelativeTime(bookmark.createdAt) : null}
         </span>
         <div className="text-k-icon flex items-center gap-2">
           <button
