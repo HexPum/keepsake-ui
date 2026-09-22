@@ -24,6 +24,11 @@ RUN apt-get update \
 # CRAWLER_ASR_MODEL at it. Nothing here runs unless CRAWLER_ASR_ENABLED is set.
 FROM debian:bookworm-slim AS whisper_builder
 
+# Pinned to a verified release tag rather than a moving HEAD, so this stage
+# doesn't silently pick up an upstream ggml-cpu regression between builds.
+ARG WHISPER_CPP_VERSION=v1.9.3
+ARG TARGETARCH
+
 RUN apt-get update \
     && apt-get install --no-install-recommends -y \
         build-essential \
@@ -31,12 +36,18 @@ RUN apt-get update \
         git \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && git clone --depth 1 https://github.com/ggml-org/whisper.cpp /src \
+    && git clone --depth 1 --branch "${WHISPER_CPP_VERSION}" https://github.com/ggml-org/whisper.cpp /src \
+    && extra_args="" \
+    && if [ "${TARGETARCH}" = "arm64" ]; then \
+        extra_args="-DGGML_CPU_ARM_ARCH=armv8-a"; \
+    fi \
     && cmake -B /src/build -S /src \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_SHARED_LIBS=OFF \
         -DWHISPER_BUILD_TESTS=OFF \
         -DWHISPER_BUILD_SERVER=OFF \
+        -DGGML_NATIVE=OFF \
+        ${extra_args} \
     && cmake --build /src/build --config Release -j"$(nproc)" \
     && mkdir -p /out \
     && cp /src/build/bin/whisper-cli /out/whisper-cli

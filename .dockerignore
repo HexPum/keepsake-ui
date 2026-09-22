@@ -1,6 +1,11 @@
 Dockerfile
 .dockerignore
 **/node_modules
+# Local pnpm content-addressable store (~6 GB here). It is gitignored and is
+# rewritten by every `pnpm install`, so leaving it in the context both bloated
+# the transfer and busted the `COPY . .` layer cache. The image builds its own
+# store internally.
+.pnpm-store
 npm-debug.log
 README.md
 **/.next
@@ -28,4 +33,14 @@ snapshots
 # next.js
 .next/
 out/
-.claude/worktrees
+
+# Agent/QA runtime artifacts. These are rewritten on every agent or persona
+# run (reports, pipeline notes, prompts, settings) and are never needed in the
+# image, but they DO live in the build context: any change to them used to
+# invalidate the `COPY . .` layer and force a full AIO rebuild on every E2E/QA
+# run. Excluding the whole directory keeps that layer cacheable.
+.claude
+
+# macOS Finder metadata is rewritten whenever a directory is browsed and has
+# nothing to do with the image contents.
+**/.DS_Store
