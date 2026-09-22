@@ -30,6 +30,13 @@ services:
       DATA_DIR: ${DATA_DIR:-/data}
       # OPENAI_API_KEY: ...
 
+      # Local inference runs on Ollama.app on the HOST. Inside a container,
+      # 127.0.0.1 means the container itself, so the host must be addressed as
+      # host.docker.internal. apps/web/.env keeps the 127.0.0.1 form for
+      # host-side runs; dotenv/config does NOT override an already-set process
+      # env var, so this override wins inside the containers.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+
       HOSTNAME: 0.0.0.0
       # https://github.com/vercel/next.js/issues/71622
       # https://github.com/vercel/next.js/issues/36774
@@ -137,6 +144,10 @@ services:
       # independently of this and are what the summaries actually read.
       CRAWLER_VIDEO_DOWNLOAD: ${CRAWLER_VIDEO_DOWNLOAD:-false}
       # OPENAI_API_KEY: ...
+
+      # See the note on the web service: Ollama lives on the host, so the
+      # container must reach it as host.docker.internal, not 127.0.0.1.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
     command:
       - pnpm
       - workers
