@@ -83,6 +83,8 @@ auth_failures.log
 .claude/worktrees
 # Runtime working output of the .claude pipeline/bug-loop agents (findings, logs, offsets)
 .claude/pipeline/
+# Runtime output of the QA persona lane (reports, screenshots, docker logs)
+.claude/qa-reports/
 jean.json
 
 # `next dev` regenerates these inside the Next app on every run (see

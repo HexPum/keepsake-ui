@@ -12,7 +12,7 @@ export default defineConfig({
     },
     globalSetup: ["./setup/startContainers.ts", "./setup/seed.ts"],
     teardownTimeout: 30000,
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.ts", "qa/**/*.test.ts"],
     testTimeout: 60000,
     env: {
       NEXTAUTH_SECRET: "secret",
