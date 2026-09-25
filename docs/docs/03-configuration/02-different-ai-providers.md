@@ -43,6 +43,8 @@ INFERENCE_IMAGE_MODEL=llava
 EMBEDDING_TEXT_MODEL=embeddinggemma
 EMBEDDING_DIMENSIONS=768
 EMBEDDING_CONTEXT_LENGTH=2048
+SEMANTIC_SEARCH_ENABLED=true
+EMBEDDING_ENABLE_AUTO_INDEXING=true
 ```
 
 #### Option 2: Native Ollama API
@@ -60,6 +62,8 @@ INFERENCE_IMAGE_MODEL=llava
 EMBEDDING_TEXT_MODEL=embeddinggemma
 EMBEDDING_DIMENSIONS=768
 EMBEDDING_CONTEXT_LENGTH=2048
+SEMANTIC_SEARCH_ENABLED=true
+EMBEDDING_ENABLE_AUTO_INDEXING=true
 
 # If the model you're using doesn't support structured output, you also need:
 # INFERENCE_OUTPUT_SCHEMA=plain
@@ -68,6 +72,17 @@ EMBEDDING_CONTEXT_LENGTH=2048
 :::tip
 If you experience issues with certain models (especially OpenAI's gpt-oss models or other models requiring specific chat formats), try using the OpenAI-compatible API endpoint instead.
 :::
+
+Pull the embedding model before enabling indexing:
+
+```bash
+ollama pull embeddinggemma
+```
+
+`EMBEDDING_DIMENSIONS` must match the selected model. Changing the model or
+dimension requires regenerating existing bookmark embeddings from **Admin →
+Background Jobs**. Hybrid search combines exact matches with semantic matches and
+falls back to keyword search if the embedding service is temporarily unavailable.
 
 ### Gemini
 

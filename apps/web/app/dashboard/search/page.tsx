@@ -3,6 +3,8 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import { DenseBookmarkRow } from "@/components/dashboard/dense/DenseBookmarkRow";
 import { MobileSearchHome } from "@/components/dashboard/dense/mobile/MobileSearchHome";
+import { SearchModeSelector } from "@/components/dashboard/search/SearchModeSelector";
+import { useClientConfig } from "@/lib/clientConfig";
 import {
   useBookmarkSearch,
   useBookmarkSearchState,
@@ -15,8 +17,10 @@ import { Search } from "lucide-react";
 import { useInView } from "react-intersection-observer";
 
 function SearchComp() {
-  const { searchQuery, parsedSearchQuery } = useBookmarkSearchState();
-  const { debounceSearch } = useDoBookmarkSearch();
+  const { semanticSearchEnabled } = useClientConfig().search;
+  const { searchQuery, parsedSearchQuery, searchMode } =
+    useBookmarkSearchState();
+  const { debounceSearch, setSearchMode } = useDoBookmarkSearch();
   const hasQuery = searchQuery.trim().length > 0;
 
   // Seeded from the URL so a shared /dashboard/search?q=… link shows its own
@@ -94,10 +98,22 @@ function SearchComp() {
             setInputValue(e.target.value);
             debounceSearch(e.target.value);
           }}
-          placeholder="Search your bookmarks…"
+          placeholder={
+            searchMode === "hybrid"
+              ? "Search by idea, phrase, tag, or source…"
+              : searchMode === "semantic"
+                ? "Search by meaning…"
+                : "Search exact words and filters…"
+          }
           aria-label="Search bookmarks"
           className="text-k-fg placeholder:text-k-fg-dim min-w-0 flex-1 bg-transparent text-[13px] outline-none"
         />
+        {semanticSearchEnabled ? (
+          <SearchModeSelector
+            value={searchMode}
+            onValueChange={(mode) => setSearchMode(mode, inputValue)}
+          />
+        ) : null}
       </div>
 
       {!hasQuery ? (

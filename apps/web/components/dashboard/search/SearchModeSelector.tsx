@@ -60,7 +60,7 @@ export function SearchModeSelector({
           size="none"
           aria-label={t("search.mode_label")}
           className={cn(
-            "group h-7 gap-1.5 rounded-md border px-2 text-xs shadow-sm transition-colors",
+            "group h-7 gap-1.5 rounded-md border px-2 text-xs transition-colors",
             value === "fts"
               ? "border-border/60 bg-background/75 text-muted-foreground hover:bg-background hover:text-foreground"
               : "border-primary/20 bg-primary/10 text-primary hover:bg-primary/15",

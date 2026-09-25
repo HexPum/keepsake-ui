@@ -8,34 +8,21 @@ import type { ZBookmarkSearchMode } from "@karakeep/shared/types/bookmarks";
 import { useTRPC } from "@karakeep/shared-react/trpc";
 import { parseSearchQuery } from "@karakeep/shared/searchQueryParser";
 
+import {
+  buildBookmarkSearchHref,
+  KEYWORD_SEARCH_MODE,
+  resolveBookmarkSearchMode,
+} from "../bookmarkSearchMode";
 import { useInSearchPageStore } from "../store/useInSearchPageStore";
-
-const DEFAULT_SEARCH_MODE: ZBookmarkSearchMode = "fts";
-
-function parseSearchMode(value: string | null): ZBookmarkSearchMode {
-  if (value === "semantic" || value === "hybrid") {
-    return value;
-  }
-  return DEFAULT_SEARCH_MODE;
-}
-
-function buildSearchHref(query: string, mode: ZBookmarkSearchMode) {
-  const params = new URLSearchParams();
-  if (query) {
-    params.set("q", query);
-  }
-  if (mode !== DEFAULT_SEARCH_MODE) {
-    params.set("mode", mode);
-  }
-  const queryString = params.toString();
-  return `/dashboard/search${queryString ? `?${queryString}` : ""}`;
-}
 
 export function useBookmarkSearchState() {
   const { semanticSearchEnabled } = useClientConfig().search;
   const searchParams = useSearchParams();
   const searchQuery = searchParams.get("q") ?? "";
-  const searchMode = parseSearchMode(searchParams.get("mode"));
+  const searchMode = resolveBookmarkSearchMode(
+    searchParams.get("mode"),
+    semanticSearchEnabled,
+  );
   const pathname = usePathname();
   const lastSearch = useRef({ searchQuery, searchMode });
 
@@ -53,7 +40,7 @@ export function useBookmarkSearchState() {
   );
   const selectedSearchMode = semanticSearchEnabled
     ? effectiveSearch.searchMode
-    : DEFAULT_SEARCH_MODE;
+    : KEYWORD_SEARCH_MODE;
 
   // A query with no text (e.g. one made up entirely of qualifiers like
   // `is:fav`) has nothing to embed, so it can only be served by full-text
@@ -65,7 +52,7 @@ export function useBookmarkSearchState() {
     searchMode: selectedSearchMode,
     effectiveSearchMode: hasQueryText
       ? selectedSearchMode
-      : DEFAULT_SEARCH_MODE,
+      : KEYWORD_SEARCH_MODE,
     parsedSearchQuery: parsed,
   };
 }
@@ -87,7 +74,7 @@ export function useDoBookmarkSearch() {
 
   const navigateToSearch = useCallback(
     (query: string, mode: ZBookmarkSearchMode) => {
-      router.replace(buildSearchHref(query, mode));
+      router.replace(buildBookmarkSearchHref(query, mode));
     },
     [router],
   );

@@ -36,6 +36,14 @@ services:
       # host-side runs; dotenv/config does NOT override an already-set process
       # env var, so this override wins inside the containers.
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      # Keepsake search is meaning-first by default. Ollama's embeddinggemma
+      # produces 768-dimensional vectors; these values must stay identical in
+      # web (query embeddings) and workers (bookmark embeddings).
+      SEMANTIC_SEARCH_ENABLED: ${SEMANTIC_SEARCH_ENABLED:-true}
+      EMBEDDING_ENABLE_AUTO_INDEXING: ${EMBEDDING_ENABLE_AUTO_INDEXING:-true}
+      EMBEDDING_TEXT_MODEL: ${EMBEDDING_TEXT_MODEL:-embeddinggemma}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-768}
+      EMBEDDING_CONTEXT_LENGTH: ${EMBEDDING_CONTEXT_LENGTH:-2048}
 
       HOSTNAME: 0.0.0.0
       # https://github.com/vercel/next.js/issues/71622
@@ -148,6 +156,11 @@ services:
       # See the note on the web service: Ollama lives on the host, so the
       # container must reach it as host.docker.internal, not 127.0.0.1.
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      SEMANTIC_SEARCH_ENABLED: ${SEMANTIC_SEARCH_ENABLED:-true}
+      EMBEDDING_ENABLE_AUTO_INDEXING: ${EMBEDDING_ENABLE_AUTO_INDEXING:-true}
+      EMBEDDING_TEXT_MODEL: ${EMBEDDING_TEXT_MODEL:-embeddinggemma}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-768}
+      EMBEDDING_CONTEXT_LENGTH: ${EMBEDDING_CONTEXT_LENGTH:-2048}
     command:
       - pnpm
       - workers
