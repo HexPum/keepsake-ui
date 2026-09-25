@@ -19,6 +19,13 @@ Entry template:
 **Prevention:** ...
 -->
 
+## 2026-09-25 — Semantic-search env block was appended twice
+
+**What happened:** The local `apps/web/.env` and `apps/workers/.env` already contained the newly configured semantic-search variables, but a follow-up setup step appended the same assignments a second time. The duplicate values were identical and therefore did not change runtime behavior, but made the effective configuration needlessly ambiguous.
+**Root cause:** The pre-write inspection reported matching lines without enough surrounding context and was treated as proof that the block was absent.
+**Consequence:** Both ignored local env files needed a cleanup pass before restarting the development stack.
+**Prevention:** Before adding environment keys, inspect their full section and make updates idempotent: replace existing assignments or add only absent names, then verify each key occurs exactly once.
+
 ## 2026-09-22 — Hermes model variant was generalized before dispatch
 
 **What happened:** The user requested Hermes as the implementation agent and then had to correct the model from a generic “DeepSeek Flash” description to the exact variant “Flash v4.1” before dispatch.
