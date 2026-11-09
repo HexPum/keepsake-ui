@@ -1,7 +1,8 @@
 /**
  * Validates a redirect URL to prevent open redirect attacks.
  * Only allows:
- * - Relative paths starting with "/" (but not "//" to prevent protocol-relative URLs)
+ * - Relative paths starting with "/" that stay on this origin (neither "//"
+ *   nor "/\" — see below)
  * - The karakeep:// scheme for the mobile app
  *
  * @returns The validated URL if valid, otherwise undefined.
@@ -13,8 +14,12 @@ export function validateRedirectUrl(
     return undefined;
   }
 
-  // Allow relative paths starting with "/" but not "//" (protocol-relative URLs)
-  if (url.startsWith("/") && !url.startsWith("//")) {
+  // Allow relative paths starting with "/", but reject anything whose second
+  // character is another slash *or* a backslash. "/\evil.com" is the
+  // backslash spelling of the protocol-relative "//evil.com": the WHATWG URL
+  // parser normalises "\" to "/" for special schemes, so it would resolve to
+  // a foreign origin just like "//" does.
+  if (url.startsWith("/") && !/^[/\\]/.test(url.slice(1))) {
     return url;
   }
 

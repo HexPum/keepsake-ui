@@ -28,6 +28,14 @@ describe("validateRedirectUrl", () => {
     expect(validateRedirectUrl("//evil.com/path")).toBe(undefined);
   });
 
+  it("should reject protocol-relative URLs spelled with a backslash", () => {
+    // WHATWG URL normalises "\" to "/" for special schemes, so these would
+    // otherwise resolve to "//evil.com" — an off-origin redirect.
+    expect(validateRedirectUrl("/\\evil.com")).toBe(undefined);
+    expect(validateRedirectUrl("/\\evil.com/path")).toBe(undefined);
+    expect(validateRedirectUrl("/\\/evil.com")).toBe(undefined);
+  });
+
   it("should allow karakeep:// scheme for mobile app", () => {
     expect(validateRedirectUrl("karakeep://")).toBe("karakeep://");
     expect(validateRedirectUrl("karakeep://callback")).toBe(
