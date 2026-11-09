@@ -402,7 +402,14 @@ export async function archiveWebpage(
       const assetId = newAssetId();
       const assetPath = path.join(os.tmpdir(), assetId);
 
-      let res = await execa({
+      // `reject: false` is load-bearing. execa rejects by default both on a
+      // non-zero exit code *and* on cancellation, which made the two branches
+      // below unreachable and turned a failed archive step into a failed whole
+      // crawl job (5 retries, crawlStatus "failure") even though the page
+      // content itself had been fetched fine. It also rejects when the binary
+      // is missing, hence the catch.
+      const res = await execa({
+        reject: false,
         input: html,
         cancelSignal: abortSignal,
         env: {
@@ -420,7 +427,19 @@ export async function archiveWebpage(
         url,
         "-o",
         assetPath,
-      ]);
+      ]).catch((error: unknown) => {
+        logger.error(
+          `[Crawler][${jobId}] Failed to run monolith: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        return null;
+      });
+
+      if (res === null) {
+        await tryCatch(fs.unlink(assetPath));
+        return null;
+      }
 
       if (res.isCanceled) {
         logger.error(
