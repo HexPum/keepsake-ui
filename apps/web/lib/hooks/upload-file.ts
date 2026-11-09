@@ -29,10 +29,21 @@ export default function useUpload({
     },
     onSuccess: onSuccess,
     onError: (error, req) => {
-      const err = zUploadErrorSchema.parse(JSON.parse(error.message));
-      if (onError) {
-        onError(err, req);
+      if (!onError) {
+        return;
       }
+      // The route answers failures with a {error} JSON envelope, but a
+      // network failure ("Failed to fetch"), a proxy error or an HTML error
+      // page arrives as arbitrary text. Parsing it unconditionally threw
+      // *inside* this handler, so the caller's onError never ran and the UI
+      // was left with no message at all.
+      let err: ZUploadError;
+      try {
+        err = zUploadErrorSchema.parse(JSON.parse(error.message));
+      } catch {
+        err = { error: error.message || "Upload failed" };
+      }
+      onError(err, req);
     },
   });
 }
