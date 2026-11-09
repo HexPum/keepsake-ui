@@ -42,6 +42,7 @@ import type {
   ZGetBookmarksRequest,
   ZGetBookmarksResponse,
 } from "@karakeep/shared/types/bookmarks";
+import { parseSearchQuery } from "@karakeep/shared/searchQueryParser";
 import { BookmarkGridContextProvider } from "@karakeep/shared-react/hooks/bookmark-grid-context";
 import { useTRPC } from "@karakeep/shared-react/trpc";
 
@@ -169,6 +170,16 @@ export default function DenseFilesView({
   }, [searchText]);
 
   const isSearching = searchEnabled && debouncedSearch.trim().length > 0;
+
+  // Rows highlight the free-text part of the query and surface a note snippet
+  // for hits that matched only through the note. Neither works unless the
+  // parsed text is actually handed down — the search page and the mobile
+  // search home already pass it (see app/dashboard/search/page.tsx); this
+  // inline field did not, so its hits rendered unmarked.
+  const searchQueryText = useMemo(
+    () => (isSearching ? parseSearchQuery(debouncedSearch).text : ""),
+    [isSearching, debouncedSearch],
+  );
 
   const searchResult = useInfiniteQuery(
     api.bookmarks.searchBookmarks.infiniteQueryOptions(
@@ -618,11 +629,11 @@ export default function DenseFilesView({
             </div>
           ) : view === "list" ? (
             <div className="flex flex-1 flex-col">
-              {bookmarks.map((bookmark, i) => (
+              {bookmarks.map((bookmark) => (
                 <DenseBookmarkRow
                   key={bookmark.id}
                   bookmark={bookmark}
-                  selected={i === 0}
+                  searchQuery={searchQueryText}
                 />
               ))}
             </div>
