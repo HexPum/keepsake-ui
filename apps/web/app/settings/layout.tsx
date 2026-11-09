@@ -44,10 +44,16 @@ import { tryCatch } from "@karakeep/shared/tryCatch";
 // dashboard/dense-theme.css's own comment for what these tokens mean.
 import "../dashboard/dense-theme.css";
 
+// Must be registered as `--font-k-sans-plex`, not `--font-k-sans`: the theme
+// controller writes `--font-k-sans: var(--font-k-sans-plex)` inline on
+// `.k-dense-zoom` (see lib/dense/theme.ts), so this file has to define the
+// *referenced* variable. Registering it as `--font-k-sans` made that
+// indirection resolve to nothing on every /settings page, which silently
+// dropped the font-family declaration and fell back to Inter.
 const plexSans = IBM_Plex_Sans({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
-  variable: "--font-k-sans",
+  variable: "--font-k-sans-plex",
   fallback: ["sans-serif"],
 });
 
