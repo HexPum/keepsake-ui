@@ -619,11 +619,15 @@ export const bookmarksAppRouter = router({
           somethingChanged = true;
         }
 
-        if (input.text) {
+        if (input.text !== undefined) {
           const result = await tx
             .update(bookmarkTexts)
             .set({
-              text: input.text,
+              // `null` and "" both mean "clear the body". The column is NOT
+              // NULL, so normalise instead of skipping the write — skipping
+              // answered 200 while silently keeping the previous content,
+              // which made an emptied note impossible to save.
+              text: input.text ?? "",
             })
             .where(eq(bookmarkTexts.id, input.bookmarkId));
 
