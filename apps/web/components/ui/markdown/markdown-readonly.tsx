@@ -1,5 +1,6 @@
 import React from "react";
 import CopyBtn from "@/components/ui/copy-button";
+import { toggleTaskListItem } from "@/lib/markdown/taskListItems";
 import { cn } from "@/lib/utils";
 import Markdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -26,40 +27,42 @@ export function MarkdownReadonly({
   children: markdown,
   className,
   onSave,
+  disabled,
 }: {
   children: string;
   className?: string;
   onSave?: (markdown: string) => void;
+  /**
+   * Set while a save is in flight. Without it a second click is computed
+   * against the same, still-unchanged `markdown` prop, so the second save
+   * contains the old state of the first task and silently undoes it.
+   */
+  disabled?: boolean;
 }) {
   /**
    * This method is triggered when a checkbox is toggled from the masonry view
    * It finds the index of the clicked checkbox inside of the note
    * It then finds the corresponding markdown and changes it accordingly
+   *
+   * The mapping from rendered checkbox to source position lives in
+   * `toggleTaskListItem`, because the rendered order and the source order
+   * differ whenever task syntax sits inside a fenced code block or a block
+   * quote.
    */
   const handleTodoClick = (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
+    if (disabled) {
+      return;
+    }
     const parent = e.target.closest(".prose");
     if (!parent) return;
-    const allCheckboxes = parent.querySelectorAll(".todo-checkbox");
-    let checkboxIndex = 0;
-    allCheckboxes.forEach((cb, i) => {
-      if (cb === e.target) checkboxIndex = i;
-    });
-    let i = 0;
-    const todoPattern = /^(\s*[-*+]\s*\[)( |x|X)(\])/gm;
-    const newMarkdown = markdown.replace(
-      todoPattern,
-      (match, prefix: string, state: string, suffix: string) => {
-        const currentIndex = i++;
-        if (currentIndex !== checkboxIndex) {
-          return match;
-        }
-        const isDone = state.toLowerCase() === "x";
-        const nextState = isDone ? " " : "x";
-        return `${prefix}${nextState}${suffix}`;
-      },
-    );
-    if (onSave) {
+    const allCheckboxes = Array.from(parent.querySelectorAll(".todo-checkbox"));
+    const checkboxIndex = allCheckboxes.findIndex((cb) => cb === e.target);
+    if (checkboxIndex === -1) {
+      return;
+    }
+    const newMarkdown = toggleTaskListItem(markdown, checkboxIndex);
+    if (newMarkdown !== null && onSave) {
       onSave(newMarkdown);
     }
   };
@@ -73,6 +76,7 @@ export function MarkdownReadonly({
           props.type === "checkbox" ? (
             <input
               checked={props.checked}
+              disabled={disabled}
               onChange={handleTodoClick}
               type="checkbox"
               className="todo-checkbox"

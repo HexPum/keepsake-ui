@@ -37,7 +37,7 @@ export function BookmarkMarkdownComponent({
   return (
     <div className="h-full">
       {readOnly ? (
-        <MarkdownReadonly onSave={onSave}>
+        <MarkdownReadonly disabled={isPending} onSave={onSave}>
           {bookmark.content.text}
         </MarkdownReadonly>
       ) : (
