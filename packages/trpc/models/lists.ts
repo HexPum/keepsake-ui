@@ -618,11 +618,19 @@ export abstract class List {
 
     const resultIds: string[] = [];
     const queue: string[] = [this.list.id];
+    // Visited set: `parentId` is only validated against direct self-reference,
+    // so A → B → A is writable through the API. Without this guard the walk
+    // below re-enqueues the same ids forever and the request dies on OOM.
+    const visited = new Set<string>([this.list.id]);
 
     while (queue.length > 0) {
       const id = queue.pop()!;
       const children = adjecencyList.get(id) ?? [];
       children.forEach((childId) => {
+        if (visited.has(childId)) {
+          return;
+        }
+        visited.add(childId);
         queue.push(childId);
         resultIds.push(childId);
       });
