@@ -291,7 +291,31 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
-      session.user = { ...token.user };
+      const tokenUser = token.user;
+      if (!tokenUser?.id) {
+        return session;
+      }
+      // The JWT is written once, at sign-in, and lives for the configured
+      // maxAge (30 days by default). Without re-reading the row, an admin who
+      // is demoted to `user` — or whose account is deleted outright — keeps
+      // full admin access for that entire window, because the admin
+      // middleware only trusts `ctx.user.role`, which came straight from the
+      // token. Re-reading the user on every session access makes demotion and
+      // deletion take effect immediately.
+      const dbUser = await db.query.users.findFirst({
+        columns: { id: true, name: true, email: true, image: true, role: true },
+        where: eq(users.id, tokenUser.id),
+      });
+      if (!dbUser) {
+        // Account no longer exists: hand back a session without a user so
+        // every authedProcedure rejects it.
+        return { ...session, user: undefined } as unknown as typeof session;
+      }
+      session.user = {
+        ...tokenUser,
+        ...dbUser,
+        role: dbUser.role ?? "user",
+      };
       return session;
     },
   },
