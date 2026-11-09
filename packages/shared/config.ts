@@ -9,6 +9,20 @@ const stringBool = (defaultValue: string) =>
     .refine((s) => s === "true" || s === "false")
     .transform((s) => s === "true");
 
+/**
+ * `NO_COLOR` follows the https://no-color.org convention, not this codebase's
+ * strict true/false wording: the variable means "disable colour" whenever it
+ * is present and non-empty, whatever its value. Tooling, CI images and
+ * terminals routinely export `NO_COLOR=1`, which `stringBool` rejects — and
+ * because the whole schema is parsed at import time, that turned an everyday
+ * environment variable into a hard startup failure for the web app (and the
+ * workers) with an opaque ZodError.
+ */
+const noColorBool = z
+  .string()
+  .optional()
+  .transform((s) => s !== undefined && s !== "");
+
 const optionalStringBool = () =>
   z
     .string()
@@ -234,7 +248,7 @@ const allEnv = z.object({
   CRAWLER_DOMAIN_RATE_LIMIT_MAX_REQUESTS: z.coerce.number().min(1).optional(),
   CRAWLER_PREFLIGHT_USER_AGENT: z.string().optional(),
   LOG_LEVEL: z.string().default("debug"),
-  NO_COLOR: stringBool("false"),
+  NO_COLOR: noColorBool,
   DEMO_MODE: stringBool("false"),
   DEMO_MODE_EMAIL: z.string().optional(),
   DEMO_MODE_PASSWORD: z.string().optional(),
