@@ -19,6 +19,13 @@ Entry template:
 **Prevention:** ...
 -->
 
+## 2026-10-30 — Ignore-rule proposal verified it with a command that contradicts ripgrep's explicit-path handling
+
+**What happened:** The `.gitignore` rule for the generated `graphify-out/` directory was right, its verification was not: `rg --files graphify-out | wc -l` expecting `0` cannot be true. Confirmed behaviour: „Im geprüften Repository blendet `rg --files` vom Repository-Root die Dateien unter `graphify-out/` aus. Der explizite Aufruf `rg --files graphify-out/` listet dessen Dateien weiterhin." The same proposal called the effect "weder stagebar noch committbar" (plainly false: `git add -f` still works), claimed "risikofrei" and "kein Effekt auf Build, CI oder Deployments", used the unanchored `graphify-out/`, and put a file-size figure in the comment.
+**Root cause:** The check was written from the intended narrative ("the directory disappears from file listings") rather than from the tool's documented handling of explicit paths, and it was never executed — that shell had no `rg` on `PATH`, so the wrong expectation was published untested.
+**Consequence:** The user had to correct the command, the pattern anchoring and three absolute claims; the rule landed as the root-anchored `/graphify-out/` with no size note.
+**Prevention:** Execute a verification command before publishing it, or say plainly that it could not be run. When describing an ignore rule, name the tool and mode (recursive listing from the repo root vs. an explicitly passed path) instead of implying one effect for every tool, and never call a file "not addable" while `git add -f` exists. Anchor a pattern to the directory actually investigated unless a wider match was requested.
+
 ## 2026-09-25 — Semantic-search env block was appended twice
 
 **What happened:** The local `apps/web/.env` and `apps/workers/.env` already contained the newly configured semantic-search variables, but a follow-up setup step appended the same assignments a second time. The duplicate values were identical and therefore did not change runtime behavior, but made the effective configuration needlessly ambiguous.

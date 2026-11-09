@@ -87,6 +87,9 @@ auth_failures.log
 .claude/qa-reports/
 jean.json
 
+# Generated, machine-local Graphify output
+/graphify-out/
+
 # `next dev` regenerates these inside the Next app on every run (see
 # node_modules/next/dist/server/lib/generate-agent-files.js). They are machine
 # state, not source, and this repo already keeps its own curated AGENTS.md and
@@ -105,3 +108,6 @@ design/presets/
 # Affinity writes this next to a document while it's open and removes it on
 # close; it must never be committed or deleted out from under a live session.
 *.af~lock~
+
+# Machine-local docker env backups (contain LAN IPs and host paths)
+docker/.env.bak.*
