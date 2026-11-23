@@ -58,7 +58,7 @@ export function SearchModeSelector({
           type="button"
           variant="none"
           size="none"
-          aria-label={t("search.mode_label")}
+          aria-label={`${t("search.mode_label")}: ${t(activeMode.labelKey)}`}
           className={cn(
             "group h-7 gap-1.5 rounded-md border px-2 text-xs transition-colors",
             value === "fts"

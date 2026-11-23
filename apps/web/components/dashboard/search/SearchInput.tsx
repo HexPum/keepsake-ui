@@ -23,7 +23,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { useClientConfig } from "@/lib/clientConfig";
-import { useDoBookmarkSearch } from "@/lib/hooks/bookmark-search";
+import {
+  useDoBookmarkSearch,
+  useSearchQueryDraft,
+} from "@/lib/hooks/bookmark-search";
 import { useTranslation } from "@/lib/i18n/client";
 import { cn } from "@/lib/utils";
 
@@ -94,7 +97,7 @@ const SearchInput = React.forwardRef<
     removeItem: (k: string) => localStorage.removeItem(k),
   });
 
-  const [value, setValue] = useState(searchQuery);
+  const { value, setValue, resetValue } = useSearchQueryDraft(searchQuery);
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);
   const [newNestedListModalOpen, setNewNestedListModalOpen] = useState(false);
 
@@ -147,23 +150,21 @@ const SearchInput = React.forwardRef<
   const handleHistorySelect = useCallback(
     (term: string) => {
       isHistorySelected.current = true;
-      setValue(term);
+      resetValue(term);
       doSearch(term);
       addTerm(term);
       setIsPopoverOpen(false);
       inputRef.current?.blur();
     },
-    [doSearch, addTerm],
+    [doSearch, addTerm, resetValue],
   );
 
   useFocusSearchOnKeyPress(inputRef, value, setValue, setIsPopoverOpen);
   useImperativeHandle(ref, () => inputRef.current!);
 
   useEffect(() => {
-    if (!isInSearchPage) {
-      setValue("");
-    }
-  }, [isInSearchPage]);
+    if (!isInSearchPage) resetValue("");
+  }, [isInSearchPage, resetValue]);
 
   const handleFocus = useCallback(() => {
     setIsPopoverOpen(true);
@@ -221,7 +222,7 @@ const SearchInput = React.forwardRef<
         {semanticSearchEnabled ? (
           <SearchModeSelector
             value={searchMode}
-            onValueChange={(mode) => setSearchMode(mode, value)}
+            onValueChange={(mode) => resetValue(setSearchMode(mode, value))}
           />
         ) : null}
       </div>

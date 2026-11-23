@@ -1,14 +1,16 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef } from "react";
 import { DenseBookmarkRow } from "@/components/dashboard/dense/DenseBookmarkRow";
 import { MobileSearchHome } from "@/components/dashboard/dense/mobile/MobileSearchHome";
 import { SearchModeSelector } from "@/components/dashboard/search/SearchModeSelector";
+import { SearchGuidance } from "@/components/dashboard/search/SearchGuidance";
 import { useClientConfig } from "@/lib/clientConfig";
 import {
   useBookmarkSearch,
   useBookmarkSearchState,
   useDoBookmarkSearch,
+  useSearchQueryDraft,
 } from "@/lib/hooks/bookmark-search";
 import { useInSearchPageStore } from "@/lib/store/useInSearchPageStore";
 import { useSortOrderStore } from "@/lib/store/useSortOrderStore";
@@ -21,12 +23,18 @@ function SearchComp() {
   const { searchQuery, parsedSearchQuery, searchMode } =
     useBookmarkSearchState();
   const { debounceSearch, setSearchMode } = useDoBookmarkSearch();
-  const hasQuery = searchQuery.trim().length > 0;
+  const hasQuery =
+    parsedSearchQuery.text.trim().length > 0 || !!parsedSearchQuery.matcher;
 
   // Seeded from the URL so a shared /dashboard/search?q=… link shows its own
   // query in the field rather than an empty one.
-  const [inputValue, setInputValue] = useState(searchQuery);
+  const {
+    value: inputValue,
+    setValue: setInputValue,
+    resetValue: resetInputValue,
+  } = useSearchQueryDraft(searchQuery);
   const inputRef = useRef<HTMLInputElement>(null);
+  const isComposing = useRef(false);
 
   // Gated on there being something to search for. Previously this fired a
   // `searchBookmarks` request for `""` whenever the page was opened without
@@ -43,6 +51,8 @@ function SearchComp() {
     fetchNextPage,
     isFetchingNextPage,
     refetch,
+    isPlaceholderData,
+    isPending,
   } = useBookmarkSearch({ enabled: hasQuery });
 
   const { setInSearchPage } = useInSearchPageStore();
@@ -75,7 +85,10 @@ function SearchComp() {
   const results = data?.pages.flatMap((p) => p.bookmarks);
 
   return (
-    <div className="hidden flex-col gap-3 sm:flex">
+    <div
+      className="hidden flex-col gap-3 sm:flex"
+      aria-busy={hasQuery && (isPending || isPlaceholderData)}
+    >
       {/* The header that carries the rest of the app's search field belongs to
           DenseFilesView, which this route does not render — so without a field
           of its own this page used to instruct the reader to "search from the
@@ -96,7 +109,14 @@ function SearchComp() {
           value={inputValue}
           onChange={(e) => {
             setInputValue(e.target.value);
-            debounceSearch(e.target.value);
+            if (!isComposing.current) debounceSearch(e.target.value);
+          }}
+          onCompositionStart={() => {
+            isComposing.current = true;
+          }}
+          onCompositionEnd={(e) => {
+            isComposing.current = false;
+            debounceSearch(e.currentTarget.value);
           }}
           placeholder={
             searchMode === "hybrid"
@@ -111,10 +131,14 @@ function SearchComp() {
         {semanticSearchEnabled ? (
           <SearchModeSelector
             value={searchMode}
-            onValueChange={(mode) => setSearchMode(mode, inputValue)}
+            onValueChange={(mode) =>
+              resetInputValue(setSearchMode(mode, inputValue))
+            }
           />
         ) : null}
       </div>
+
+      <SearchGuidance semanticSearchEnabled={semanticSearchEnabled} />
 
       {!hasQuery ? (
         // With the query gated off there is no request in flight, so the
@@ -129,9 +153,16 @@ function SearchComp() {
         // route error boundary. A search failing is routine and recoverable
         // — show it in place, with a way to retry, instead of crashing the
         // page around it.
-        <div className="flex flex-col items-center gap-[10px] py-[40px] text-center">
+        <div
+          role="alert"
+          className="flex flex-col items-center gap-[10px] py-[40px] text-center"
+        >
           <p className="text-k-fg-dim text-sm">
-            Search failed. The search index may be unavailable.
+            {error.data?.code === "BAD_REQUEST"
+              ? error.message
+              : searchMode === "semantic"
+                ? "Search by meaning is unavailable. Check that semantic search is enabled and your saved items have been indexed, or try keywords."
+                : "Search failed. The search index may be unavailable."}
           </p>
           <button
             type="button"
@@ -140,8 +171,17 @@ function SearchComp() {
           >
             Try again
           </button>
+          {searchMode !== "fts" && (
+            <button
+              type="button"
+              onClick={() => resetInputValue(setSearchMode("fts", inputValue))}
+              className="text-k-accent text-xs underline underline-offset-4"
+            >
+              Search with keywords
+            </button>
+          )}
         </div>
-      ) : results ? (
+      ) : results && !isPlaceholderData ? (
         results.length === 0 ? (
           // Distinct from the "no bookmarks yet" empty state
           // (NoBookmarksBanner, shown when the whole account has zero

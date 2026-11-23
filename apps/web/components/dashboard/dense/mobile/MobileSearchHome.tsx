@@ -4,6 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { SearchMatchText } from "@/components/dashboard/dense/SearchMatchText";
+import { SearchModeSelector } from "@/components/dashboard/search/SearchModeSelector";
+import { SearchGuidance } from "@/components/dashboard/search/SearchGuidance";
+import { useClientConfig } from "@/lib/clientConfig";
+import { useTranslation } from "@/lib/i18n/client";
 import {
   getDenseRowSource,
   getDenseRowTitle,
@@ -18,6 +22,7 @@ import {
   useBookmarkSearch,
   useBookmarkSearchState,
   useDoBookmarkSearch,
+  useSearchQueryDraft,
 } from "@/lib/hooks/bookmark-search";
 import { cn } from "@/lib/utils";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
@@ -57,14 +62,23 @@ const isUnread = (b: ZBookmark) => b.summarizationStatus === "pending";
  */
 export function MobileSearchHome() {
   const api = useTRPC();
-  const { searchQuery, parsedSearchQuery } = useBookmarkSearchState();
-  const { debounceSearch } = useDoBookmarkSearch();
-  const [inputValue, setInputValue] = useState(searchQuery);
+  const { searchQuery, parsedSearchQuery, searchMode } =
+    useBookmarkSearchState();
+  const { debounceSearch, setSearchMode } = useDoBookmarkSearch();
+  const { semanticSearchEnabled } = useClientConfig().search;
+  const { t } = useTranslation();
+  const {
+    value: inputValue,
+    setValue: setInputValue,
+    resetValue: resetInputValue,
+  } = useSearchQueryDraft(searchQuery);
+  const isComposing = useRef(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [swiping, setSwiping] = useState<string | null>(null);
   const [archived, setArchived] = useState<string[]>([]);
 
-  const hasQuery = searchQuery.trim().length > 0;
+  const hasQuery =
+    parsedSearchQuery.text.trim().length > 0 || !!parsedSearchQuery.matcher;
 
   // Queue data (when no search query)
   const queueResult = useInfiniteQuery(
@@ -162,7 +176,12 @@ export function MobileSearchHome() {
   const isEmptyQueue = !hasQuery && bookmarks.length === 0;
 
   return (
-    <div className="flex h-full flex-col sm:hidden">
+    <div
+      className="flex h-full flex-col sm:hidden"
+      aria-busy={
+        hasQuery && (searchResult.isPending || searchResult.isPlaceholderData)
+      }
+    >
       {/* Search bar */}
       <div className="flex-none px-[14px] pb-[10px] pt-[10px]">
         <div
@@ -186,11 +205,36 @@ export function MobileSearchHome() {
             value={inputValue}
             onChange={(e) => {
               setInputValue(e.target.value);
-              debounceSearch(e.target.value);
+              if (!isComposing.current) debounceSearch(e.target.value);
             }}
-            placeholder="Search…"
+            onCompositionStart={() => {
+              isComposing.current = true;
+            }}
+            onCompositionEnd={(e) => {
+              isComposing.current = false;
+              debounceSearch(e.currentTarget.value);
+            }}
+            aria-label={t("search.search_bookmarks")}
+            placeholder={t(
+              searchMode === "semantic"
+                ? "search.semantic_placeholder"
+                : searchMode === "hybrid"
+                  ? "search.hybrid_placeholder"
+                  : "search.keyword_placeholder",
+            )}
             className="text-k-fg placeholder:text-k-fg-dim min-w-0 flex-1 bg-transparent text-[14px] outline-none"
           />
+          {semanticSearchEnabled && (
+            <SearchModeSelector
+              value={searchMode}
+              onValueChange={(mode) =>
+                resetInputValue(setSearchMode(mode, inputValue))
+              }
+            />
+          )}
+        </div>
+        <div className="pt-2">
+          <SearchGuidance semanticSearchEnabled={semanticSearchEnabled} />
         </div>
       </div>
 
@@ -225,7 +269,38 @@ export function MobileSearchHome() {
           padding: 0,
         }}
       >
-        {isPending ? (
+        {hasQuery && searchResult.error ? (
+          <div
+            role="alert"
+            className="text-k-fg-dim flex flex-col items-center gap-3 px-[18px] py-[40px] text-center text-[13px]"
+          >
+            <p>
+              {searchResult.error.data?.code === "BAD_REQUEST"
+                ? searchResult.error.message
+                : searchMode === "semantic"
+                  ? "Search by meaning is unavailable. Check that semantic search is enabled and your saved items have been indexed, or try keywords."
+                  : "Search failed. Please try again."}
+            </p>
+            <button
+              type="button"
+              onClick={() => searchResult.refetch()}
+              className="text-k-accent underline underline-offset-4"
+            >
+              Try again
+            </button>
+            {searchMode !== "fts" && (
+              <button
+                type="button"
+                onClick={() =>
+                  resetInputValue(setSearchMode("fts", inputValue))
+                }
+                className="text-k-accent underline underline-offset-4"
+              >
+                Search with keywords
+              </button>
+            )}
+          </div>
+        ) : isPending || (hasQuery && searchResult.isPlaceholderData) ? (
           <div className="flex flex-col gap-[6px] px-[18px] pt-[13px]">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="flex flex-col gap-[6px] pb-[13px]">

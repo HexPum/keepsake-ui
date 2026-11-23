@@ -40,6 +40,10 @@ import { EnqueueOptions } from "@karakeep/shared/queueing";
 import { getRateLimitClient } from "@karakeep/shared/ratelimiting";
 import { FilterQuery, getSearchClient } from "@karakeep/shared/search";
 import { parseSearchQuery } from "@karakeep/shared/searchQueryParser";
+import {
+  getSemanticSearchTerms,
+  MAX_SEMANTIC_SEARCH_TERMS,
+} from "@karakeep/shared/semanticSearchQuery";
 import type {
   ZBookmarkContent,
   ZBookmarkSource,
@@ -181,10 +185,14 @@ export function createSemanticSearchRateLimitMiddleware<T>() {
     };
     input: {
       searchMode: "fts" | "semantic" | "hybrid";
+      text?: string;
     };
     next: () => Promise<T>;
   }) {
-    if (opts.input.searchMode === "fts") {
+    if (
+      opts.input.searchMode === "fts" &&
+      getSemanticSearchTerms(opts.input.text ?? "") === null
+    ) {
       return opts.next();
     }
     return rateLimitMiddleware(opts);
@@ -949,16 +957,33 @@ export const bookmarksAppRouter = router({
       }),
     )
     .query(async ({ input, ctx }) => {
+      const semanticTerms = getSemanticSearchTerms(input.text);
+      const searchMode = semanticTerms !== null ? "semantic" : input.searchMode;
+      if (semanticTerms && semanticTerms.length > MAX_SEMANTIC_SEARCH_TERMS) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `Search by meaning supports up to ${MAX_SEMANTIC_SEARCH_TERMS} ideas at once`,
+        });
+      }
       addLogFields<"search.query">({
         "search.has_query": input.text.length > 0,
-        "search.mode": input.searchMode,
+        "search.mode": searchMode,
       });
       const limit = input.limit ?? DEFAULT_NUM_BOOKMARKS_PER_PAGE;
       const sortOrder = input.sortOrder || "relevance";
-      const parsedQuery = parseSearchQuery(input.text);
+      // Qualifiers apply to every idea in a broadened search, including the
+      // ownership filter below. Never pass shortcut markers to an embedder.
+      const parsedQuery = parseSearchQuery(
+        semanticTerms?.join(" ") ?? input.text,
+      );
+      const queryTexts = semanticTerms
+        ? semanticTerms
+            .map((term) => parseSearchQuery(term).text.trim())
+            .filter(Boolean)
+        : [parsedQuery.text];
 
       if (
-        input.searchMode !== "fts" &&
+        searchMode !== "fts" &&
         (!serverConfig.experimentalFeatures.semanticSearch ||
           !serverConfig.embedding.enableAutoIndexing)
       ) {
@@ -1031,7 +1056,7 @@ export const bookmarksAppRouter = router({
         return fullTextPage(await fullTextSearch(limit, offset));
       };
 
-      if (input.searchMode === "fts") {
+      if (searchMode === "fts") {
         ({ hits, hasMore, resultCount } = fullTextPage(
           await fullTextSearch(limit, offset),
         ));
@@ -1044,7 +1069,7 @@ export const bookmarksAppRouter = router({
           embeddingClient: EmbeddingClientFactory.build(),
           vectorStoreClient: await getVectorStoreClient(),
         }))().catch((error: unknown) => {
-          if (input.searchMode === "semantic") {
+          if (searchMode === "semantic") {
             throw error;
           }
           semanticInfraError = error;
@@ -1053,7 +1078,7 @@ export const bookmarksAppRouter = router({
         const embeddingClient = semanticClients?.embeddingClient;
         const vectorStoreClient = semanticClients?.vectorStoreClient;
         if (!hasQueryText || !embeddingClient || !vectorStoreClient) {
-          if (input.searchMode === "semantic") {
+          if (searchMode === "semantic") {
             throw new TRPCError({
               code: "BAD_REQUEST",
               message: hasQueryText
@@ -1084,26 +1109,53 @@ export const bookmarksAppRouter = router({
 
           const semanticSearch = async (limit: number) => {
             const embeddingResponse =
-              await embeddingClient.generateEmbeddingFromText([
-                parsedQuery.text,
-              ]);
-            const vector = embeddingResponse.embeddings[0];
-            if (!vector) {
+              await embeddingClient.generateEmbeddingFromText(queryTexts);
+            if (
+              embeddingResponse.embeddings.length !== queryTexts.length ||
+              embeddingResponse.embeddings.some((vector) => !vector?.length)
+            ) {
               throw new TRPCError({
                 code: "INTERNAL_SERVER_ERROR",
                 message: "Embedding provider returned no query embedding",
               });
             }
-            return vectorStoreClient.search({
-              vector,
-              filter: vectorFilter,
-              limit,
-              rankingScoreThreshold: SEMANTIC_SCORE_THRESHOLD,
-            });
+            const responses = await Promise.all(
+              embeddingResponse.embeddings.map((vector) =>
+                vectorStoreClient.search({
+                  vector,
+                  filter: vectorFilter,
+                  limit,
+                  rankingScoreThreshold: SEMANTIC_SCORE_THRESHOLD,
+                }),
+              ),
+            );
+            if (responses.length === 1) return responses[0];
+            // OR semantics: retain each bookmark's strongest match across ideas.
+            // Scores come from the same model/store, so they share a scale.
+            const scores = new Map<string, number>();
+            for (const response of responses) {
+              for (const hit of response.hits) {
+                scores.set(
+                  hit.id,
+                  Math.max(scores.get(hit.id) ?? -Infinity, hit.score),
+                );
+              }
+            }
+            return {
+              hits: [...scores]
+                .map(([id, score]) => ({ id, score }))
+                .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id)),
+            };
           };
 
-          if (input.searchMode === "semantic") {
-            const semanticLimit = offset + limit + 1;
+          if (searchMode === "semantic") {
+            // A fixed pool for chained ideas prevents score ties entering on
+            // later pages from changing the ordering of previously seen hits.
+            // Single-idea search retains its existing expanding window.
+            const semanticLimit =
+              queryTexts.length > 1
+                ? HYBRID_CANDIDATES_PER_SOURCE
+                : offset + limit + 1;
             const semanticResp = await semanticSearch(semanticLimit);
             hits = semanticResp.hits.slice(offset, offset + limit);
             hasMore = semanticResp.hits.length > offset + limit;

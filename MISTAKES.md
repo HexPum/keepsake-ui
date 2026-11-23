@@ -19,6 +19,13 @@ Entry template:
 **Prevention:** ...
 -->
 
+## 2026-11-09 — Search verification started with the wrong local runtime
+
+**What happened:** The first router-test run used the shell's Node 26, but the installed SQLite binding was built for Node 24. The build checker also could not find the project's required pnpm binary; the same missing-tool assumption had occurred in an earlier semantic-search run.
+**Root cause:** The project runtime and package-manager availability were not checked before invoking verification commands. Existing dependencies do not prove that the shell can run the project's tooling.
+**Consequence:** The initial router run failed before executing tests. The tests passed with the installed Node 24 and a temporary data directory, but the full build/preflight remains blocked by absent pnpm and restricted network access to the package registry and Google Fonts.
+**Prevention:** Check `.nvmrc`, the active Node version, and the exact pnpm version before starting checks. Run database tests with an isolated temporary `DATA_DIR`. Report focused tests, full build, and visual verification separately. Repeated missing-tool root cause: promotion candidate if it recurs.
+
 ## 2026-10-30 — Ignore-rule proposal verified it with a command that contradicts ripgrep's explicit-path handling
 
 **What happened:** The `.gitignore` rule for the generated `graphify-out/` directory was right, its verification was not: `rg --files graphify-out | wc -l` expecting `0` cannot be true. Confirmed behaviour: „Im geprüften Repository blendet `rg --files` vom Repository-Root die Dateien unter `graphify-out/` aus. Der explizite Aufruf `rg --files graphify-out/` listet dessen Dateien weiterhin." The same proposal called the effect "weder stagebar noch committbar" (plainly false: `git add -f` still works), claimed "risikofrei" and "kein Effekt auf Build, CI oder Deployments", used the unanchored `graphify-out/`, and put a file-size figure in the comment.

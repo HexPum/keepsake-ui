@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useClientConfig } from "@/lib/clientConfig";
 import { useSortOrderStore } from "@/lib/store/useSortOrderStore";
@@ -7,6 +7,7 @@ import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import type { ZBookmarkSearchMode } from "@karakeep/shared/types/bookmarks";
 import { useTRPC } from "@karakeep/shared-react/trpc";
 import { parseSearchQuery } from "@karakeep/shared/searchQueryParser";
+import { getSemanticSearchTerms } from "@karakeep/shared/semanticSearchQuery";
 
 import {
   buildBookmarkSearchHref,
@@ -15,6 +16,28 @@ import {
 } from "../bookmarkSearchMode";
 import { useInSearchPageStore } from "../store/useInSearchPageStore";
 
+/** Keep newer typing when the URL acknowledges an older debounced search. */
+export function useSearchQueryDraft(query: string) {
+  const [value, setState] = useState(query);
+  const sourceQuery = useRef(query);
+  sourceQuery.current = query;
+  const draft = useRef({ value: query, dirty: false });
+  const setValue = useCallback((next: string) => {
+    draft.current = { value: next, dirty: next !== sourceQuery.current };
+    setState(next);
+  }, []);
+  const resetValue = useCallback((next: string) => {
+    draft.current = { value: next, dirty: false };
+    setState(next);
+  }, []);
+  useEffect(() => {
+    if (!draft.current.dirty || draft.current.value === query) {
+      resetValue(query);
+    }
+  }, [query, resetValue]);
+  return { value, setValue, resetValue };
+}
+
 export function useBookmarkSearchState() {
   const { semanticSearchEnabled } = useClientConfig().search;
   const searchParams = useSearchParams();
@@ -22,6 +45,7 @@ export function useBookmarkSearchState() {
   const searchMode = resolveBookmarkSearchMode(
     searchParams.get("mode"),
     semanticSearchEnabled,
+    searchQuery,
   );
   const pathname = usePathname();
   const lastSearch = useRef({ searchQuery, searchMode });
@@ -35,7 +59,11 @@ export function useBookmarkSearchState() {
 
   const effectiveSearch = lastSearch.current;
   const parsed = useMemo(
-    () => parseSearchQuery(effectiveSearch.searchQuery),
+    () =>
+      parseSearchQuery(
+        getSemanticSearchTerms(effectiveSearch.searchQuery)?.join(" ") ??
+          effectiveSearch.searchQuery,
+      ),
     [effectiveSearch.searchQuery],
   );
   const selectedSearchMode = semanticSearchEnabled
@@ -81,6 +109,7 @@ export function useDoBookmarkSearch() {
 
   const doSearch = useCallback(
     (val: string) => {
+      if (timeoutId.current) clearTimeout(timeoutId.current);
       timeoutId.current = null;
       navigateToSearch(val, searchMode);
     },
@@ -94,7 +123,7 @@ export function useDoBookmarkSearch() {
       }
       timeoutId.current = setTimeout(() => {
         doSearch(val);
-      }, 10);
+      }, 300);
     },
     [doSearch],
   );
@@ -105,7 +134,13 @@ export function useDoBookmarkSearch() {
         clearTimeout(timeoutId.current);
         timeoutId.current = null;
       }
-      navigateToSearch(query, mode);
+      // An explicit mode choice exits the shortcut so the user's selection
+      // takes effect instead of being overridden by the leading marker.
+      const terms = getSemanticSearchTerms(query);
+      const nextQuery =
+        mode === "semantic" ? query : (terms?.join(" ") ?? query);
+      navigateToSearch(nextQuery, mode);
+      return nextQuery;
     },
     [navigateToSearch, searchQuery],
   );

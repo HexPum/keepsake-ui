@@ -1,4 +1,5 @@
 import type { ZBookmarkSearchMode } from "@karakeep/shared/types/bookmarks";
+import { getSemanticSearchTerms } from "@karakeep/shared/semanticSearchQuery";
 
 export const KEYWORD_SEARCH_MODE: ZBookmarkSearchMode = "fts";
 export const SEMANTIC_DEFAULT_SEARCH_MODE: ZBookmarkSearchMode = "hybrid";
@@ -6,7 +7,11 @@ export const SEMANTIC_DEFAULT_SEARCH_MODE: ZBookmarkSearchMode = "hybrid";
 export function resolveBookmarkSearchMode(
   value: string | null,
   semanticSearchEnabled: boolean,
+  query = "",
 ): ZBookmarkSearchMode {
+  if (semanticSearchEnabled && getSemanticSearchTerms(query) !== null) {
+    return "semantic";
+  }
   if (value === KEYWORD_SEARCH_MODE) {
     return value;
   }
