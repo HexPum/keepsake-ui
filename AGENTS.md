@@ -186,10 +186,12 @@ the layer you look at: a denser list, a reading-focused detail view, a runtime
 theme system, and a consistent visual language across the dashboard and
 settings.
 
-**Design mission, treat as fixed unless the user says otherwise:** no
-thumbnails or image previews anywhere. Saved items are represented entirely by
-their AI-generated title and AI summary, so the list reads like a briefing,
-not a gallery.
+**Design default, not a prohibition:** text-led Files — articles, notes, links
+— are represented by their AI-generated title and AI summary rather than a
+thumbnail, so the list reads like a briefing, not a gallery. Where the image
+*is* the information, as it is for a purchasable physical object, an image-led
+view is the right answer: that is the Gallery. See `CONTEXT.md` for the
+vocabulary. Minimalism is the starting point here, not a hard rule.
 
 ## Design system — source of truth, read before touching any dashboard UI
 
