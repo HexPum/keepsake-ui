@@ -168,6 +168,32 @@ Restart both processes, then backfill existing bookmarks from
 **Admin → Background Jobs → Reindex**. Without a search backend the search
 control stays visibly disabled rather than failing when clicked.
 
+### Search by meaning
+
+When semantic search is configured, the web search defaults to Hybrid: exact
+matches plus related ideas. Use the search-mode menu on desktop or mobile to
+choose Keyword, Hybrid, or Semantic.
+
+The meaning-search shortcut follows [mymind's documented semantic search](https://mymind.helpscoutdocs.com/article/107-beta-semantic-search):
+
+- `|| quiet places to read` finds related saved items without requiring those exact words.
+- `|| architecture || urban photography` broadens the search to either idea, with each saved item shown once.
+- `|| quiet places tag:travel` combines meaning with Keepsake's existing filters. Filters apply across all ideas in a chained search.
+
+Search supports up to eight ideas at once. Chained searches combine the top 100
+matches per idea into a stable pool for paging. Quotes keep `||` literal within a
+phrase; queries without a leading `||` retain the selected search mode. Choosing
+Keyword or Hybrid removes the shortcut from the current query. Search links
+retain the query and selected mode.
+
+This uses Keepsake's own embedding and vector-search providers. It does not
+connect to a mymind account or use mymind's private model or ranking. Both web
+and workers need `SEMANTIC_SEARCH_ENABLED=true` and
+`EMBEDDING_ENABLE_AUTO_INDEXING=true`, a configured embedding model, and a vector
+store. Existing saved items must have embeddings before they can be found by
+meaning. Hybrid can fall back to keyword results if the semantic provider is
+unavailable; explicit Semantic searches show an error with a keyword option.
+
 ## Development
 
 ```bash

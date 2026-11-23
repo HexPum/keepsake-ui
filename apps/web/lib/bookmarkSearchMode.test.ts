@@ -6,6 +6,17 @@ import {
 } from "./bookmarkSearchMode";
 
 describe("resolveBookmarkSearchMode", () => {
+  test("recognizes the meaning shortcut without treating quoted text as a command", () => {
+    expect(
+      resolveBookmarkSearchMode("fts", true, "|| warm evening light"),
+    ).toBe("semantic");
+    expect(
+      resolveBookmarkSearchMode(null, false, "|| warm evening light"),
+    ).toBe("fts");
+    expect(
+      resolveBookmarkSearchMode("fts", true, '"|| warm evening light"'),
+    ).toBe("fts");
+  });
   test("defaults to hybrid when semantic search is available", () => {
     expect(resolveBookmarkSearchMode(null, true)).toBe("hybrid");
     expect(resolveBookmarkSearchMode("unknown", true)).toBe("hybrid");

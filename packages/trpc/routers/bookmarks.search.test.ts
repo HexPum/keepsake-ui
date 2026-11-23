@@ -75,6 +75,217 @@ function mockEmbeddingInfra() {
 }
 
 describe("bookmark search modes", () => {
+  test<CustomTestContext>("keeps tied-score chained results stable across page boundaries", async ({
+    apiCallers,
+  }) => {
+    const saved = await Promise.all(
+      ["one", "two", "three", "other"].map((text) =>
+        apiCallers[0].bookmarks.createBookmark({
+          type: BookmarkTypes.TEXT,
+          text,
+        }),
+      ),
+    );
+    const ids = saved
+      .slice(0, 3)
+      .map((b) => b.id)
+      .sort();
+    const embed = mockEmbeddingInfra();
+    embed.mockResolvedValue({
+      embeddings: [
+        [1, 0],
+        [0, 1],
+      ],
+      promptTokens: 2,
+      totalTokens: 2,
+    });
+    searchMocks.vectorSearch.mockImplementation(async ({ vector, limit }) => ({
+      hits: (vector[0] === 1
+        ? [ids[1], ids[2], ids[0]].map((id) => ({ id, score: 0.9 }))
+        : [{ id: saved[3].id, score: 0.7 }]
+      ).slice(0, limit),
+      processingTimeMs: 1,
+    }));
+    const first = await apiCallers[0].bookmarks.searchBookmarks({
+      text: "|| buildings || photographs",
+      limit: 1,
+    });
+    const second = await apiCallers[0].bookmarks.searchBookmarks({
+      text: "|| buildings || photographs",
+      limit: 1,
+      cursor: first.nextCursor,
+    });
+    expect(first.bookmarks.map((b) => b.id)).toEqual([ids[0]]);
+    expect(second.bookmarks.map((b) => b.id)).toEqual([ids[1]]);
+    for (const [request] of searchMocks.vectorSearch.mock.calls)
+      expect(request.limit).toBe(100);
+  });
+
+  test<CustomTestContext>("recognizes the meaning shortcut through the API and removes its markers", async ({
+    apiCallers,
+  }) => {
+    mockEmbeddingInfra();
+    searchMocks.vectorSearch.mockResolvedValue({
+      hits: [],
+      processingTimeMs: 1,
+    });
+    await apiCallers[0].bookmarks.searchBookmarks({ text: "|| quiet places" });
+    expect(
+      searchMocks.buildEmbeddingClient.mock.results[0]?.value
+        .generateEmbeddingFromText,
+    ).toHaveBeenCalledWith(["quiet places"]);
+    expect(searchMocks.search).not.toHaveBeenCalled();
+  });
+
+  test<CustomTestContext>("broadens ideas, deduplicates by strongest match, and paginates the union", async ({
+    apiCallers,
+  }) => {
+    const [building, shared, photo] = await Promise.all(
+      ["building", "shared", "photo"].map((text) =>
+        apiCallers[0].bookmarks.createBookmark({
+          type: BookmarkTypes.TEXT,
+          text,
+        }),
+      ),
+    );
+    const embed = mockEmbeddingInfra();
+    embed.mockResolvedValue({
+      embeddings: [
+        [1, 0],
+        [0, 1],
+      ],
+      promptTokens: 2,
+      totalTokens: 2,
+    });
+    searchMocks.vectorSearch.mockImplementation(async ({ vector }) => ({
+      hits:
+        vector[0] === 1
+          ? [
+              { id: shared.id, score: 0.95 },
+              { id: building.id, score: 0.8 },
+            ]
+          : [
+              { id: photo.id, score: 0.9 },
+              { id: shared.id, score: 0.7 },
+            ],
+      processingTimeMs: 1,
+    }));
+    const first = await apiCallers[0].bookmarks.searchBookmarks({
+      text: "|| building || photograph",
+      limit: 2,
+    });
+    expect(first.bookmarks.map((b) => b.id)).toEqual([shared.id, photo.id]);
+    expect(first.nextCursor).toEqual({ ver: 1, offset: 2 });
+    const second = await apiCallers[0].bookmarks.searchBookmarks({
+      text: "|| building || photograph",
+      limit: 2,
+      cursor: first.nextCursor,
+    });
+    expect(second.bookmarks.map((b) => b.id)).toEqual([building.id]);
+    expect(second.nextCursor).toBeNull();
+    expect(embed).toHaveBeenCalledWith(["building", "photograph"]);
+    expect(searchMocks.search).not.toHaveBeenCalled();
+  });
+
+  test<CustomTestContext>("applies filters and ownership to every idea without embedding the filters", async ({
+    apiCallers,
+  }) => {
+    const favourite = await apiCallers[0].bookmarks.createBookmark({
+      type: BookmarkTypes.TEXT,
+      text: "favourite",
+      favourited: true,
+    });
+    await apiCallers[1].bookmarks.createBookmark({
+      type: BookmarkTypes.TEXT,
+      text: "someone else's favourite",
+      favourited: true,
+    });
+    const embed = mockEmbeddingInfra();
+    embed.mockResolvedValue({
+      embeddings: [
+        [1, 0],
+        [0, 1],
+      ],
+      promptTokens: 2,
+      totalTokens: 2,
+    });
+    searchMocks.vectorSearch.mockResolvedValue({
+      hits: [],
+      processingTimeMs: 1,
+    });
+    await apiCallers[0].bookmarks.searchBookmarks({
+      text: "|| buildings || photographs is:fav",
+    });
+    expect(embed).toHaveBeenCalledWith(["buildings", "photographs"]);
+    for (const [request] of searchMocks.vectorSearch.mock.calls) {
+      expect(request.filter).toEqual([
+        { type: "in", field: "id", values: [favourite.id] },
+        { type: "eq", field: "userId", value: favourite.userId },
+      ]);
+      expect(request.rankingScoreThreshold).toBe(0.6);
+    }
+    expect(searchMocks.vectorSearch).toHaveBeenCalledTimes(2);
+  });
+
+  test.each(["||", "|| ||", "|| is:fav"])(
+    "rejects an empty meaning search: %s",
+    async (text) => {
+      // No embedder call is valid when only the shortcut or filters were supplied.
+      mockEmbeddingInfra();
+      const { getTestDB, seedUsers, getApiCaller } =
+        await import("../testUtils");
+      const db = getTestDB();
+      const [user] = await seedUsers(db);
+      await expect(
+        getApiCaller(db, user.id).bookmarks.searchBookmarks({ text }),
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect(searchMocks.vectorSearch).not.toHaveBeenCalled();
+    },
+  );
+
+  test<CustomTestContext>("rejects too many ideas instead of silently dropping them", async ({
+    apiCallers,
+  }) => {
+    await expect(
+      apiCallers[0].bookmarks.searchBookmarks({
+        text: Array.from({ length: 9 }, (_, i) => `|| idea ${i}`).join(" "),
+      }),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(searchMocks.buildEmbeddingClient).not.toHaveBeenCalled();
+  });
+
+  test<CustomTestContext>("rejects an incomplete batch of query embeddings", async ({
+    apiCallers,
+  }) => {
+    mockEmbeddingInfra();
+    await expect(
+      apiCallers[0].bookmarks.searchBookmarks({
+        text: "|| building || photograph",
+      }),
+    ).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+    expect(searchMocks.vectorSearch).not.toHaveBeenCalled();
+  });
+
+  test("rate limits the shortcut even when the caller's default mode is keyword", async () => {
+    const wasRateLimitingEnabled = serverConfig.rateLimiting.enabled;
+    serverConfig.rateLimiting.enabled = true;
+    searchMocks.checkRateLimit.mockResolvedValue({ allowed: true });
+    searchMocks.getRateLimitClient.mockResolvedValue({
+      checkRateLimit: searchMocks.checkRateLimit,
+    });
+    try {
+      await createSemanticSearchRateLimitMiddleware<string>()({
+        path: "bookmarks.searchBookmarks",
+        ctx: { req: { ip: "127.0.0.1" }, user: { id: "user-123" } },
+        input: { searchMode: "fts", text: "|| idea" },
+        next: vi.fn().mockResolvedValue("ok"),
+      });
+      expect(searchMocks.checkRateLimit).toHaveBeenCalledOnce();
+    } finally {
+      serverConfig.rateLimiting.enabled = wasRateLimitingEnabled;
+    }
+  });
+
   test<CustomTestContext>("rejects semantic modes when the experimental feature is disabled", async ({
     apiCallers,
   }) => {
