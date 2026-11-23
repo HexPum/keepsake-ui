@@ -50,6 +50,20 @@ describe("splitByQueryMatch", () => {
       { text: "A dog on a beach", matched: false },
     ]);
   });
+
+  it("ignores the meaning shortcut markers", () => {
+    expect(splitByQueryMatch("Ein Urlaub am See", "|| urlaub")).toEqual([
+      { text: "Ein ", matched: false },
+      { text: "Urlaub", matched: true },
+      { text: " am See", matched: false },
+    ]);
+  });
+
+  it("doesn't highlight single characters", () => {
+    expect(splitByQueryMatch("A dog on a beach", "a")).toEqual([
+      { text: "A dog on a beach", matched: false },
+    ]);
+  });
 });
 
 describe("queryMatches", () => {

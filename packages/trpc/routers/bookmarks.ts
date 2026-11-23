@@ -41,6 +41,10 @@ import { getRateLimitClient } from "@karakeep/shared/ratelimiting";
 import { FilterQuery, getSearchClient } from "@karakeep/shared/search";
 import { parseSearchQuery } from "@karakeep/shared/searchQueryParser";
 import {
+  searchQueryWords,
+  textMatchesQueryWords,
+} from "@karakeep/shared/searchTextMatch";
+import {
   getSemanticSearchTerms,
   MAX_SEMANTIC_SEARCH_TERMS,
 } from "@karakeep/shared/semanticSearchQuery";
@@ -1016,6 +1020,9 @@ export const bookmarksAppRouter = router({
       let hits: { id: string; score: number }[];
       let hasMore: boolean;
       let resultCount: number;
+      // Set in hybrid mode to the fused candidate pool, so the exact-first
+      // pass below can reorder the whole pool rather than one page of it.
+      let hybridPool: { id: string; score: number }[] | null = null;
 
       const fullTextSearch = async (limit: number, searchOffset?: number) => {
         const client = await getSearchClient();
@@ -1179,6 +1186,7 @@ export const bookmarksAppRouter = router({
                 ftsResult.value.hits,
                 semanticResult.value.hits,
               ]);
+              hybridPool = fusedHits;
               hits = fusedHits.slice(offset, offset + limit);
               hasMore = fusedHits.length > offset + limit;
               resultCount = fusedHits.length;
@@ -1191,13 +1199,48 @@ export const bookmarksAppRouter = router({
         "search.results_count": resultCount,
       });
 
+      // Exact hits first. Fusion ranks by agreement between the two sources,
+      // which can lift a semantic-only hit above one whose title literally
+      // contains the query word — the opposite of what the result list is
+      // meant to say. The partition is stable, so each group keeps its fused
+      // order, and it runs on the whole pool (not the page) to keep paging
+      // consistent across cursors.
+      if (hybridPool) {
+        const words = searchQueryWords(parsedQuery.text);
+        if (words.length > 0) {
+          const { bookmarks: candidates } = await Bookmark.loadMulti(ctx, {
+            ids: hybridPool.map((hit) => hit.id),
+            includeContent: false,
+            sortOrder: "desc",
+          });
+          const literals = new Set<string>();
+          for (const candidate of candidates) {
+            const bookmark = candidate.asZBookmark();
+            if (
+              textMatchesQueryWords(bookmark.title, words) ||
+              textMatchesQueryWords(bookmark.summary, words) ||
+              textMatchesQueryWords(bookmark.note, words)
+            ) {
+              literals.add(candidate.id);
+            }
+          }
+          hybridPool = [
+            ...hybridPool.filter((hit) => literals.has(hit.id)),
+            ...hybridPool.filter((hit) => !literals.has(hit.id)),
+          ];
+        }
+        hits = hybridPool.slice(offset, offset + limit);
+        hasMore = hybridPool.length > offset + limit;
+        resultCount = hybridPool.length;
+      }
+
       if (hits.length == 0) {
         return { bookmarks: [], nextCursor: null };
       }
-      const idToRank = hits.reduce<Record<string, number>>((acc, r) => {
-        acc[r.id] = r.score;
-        return acc;
-      }, {});
+      // Rank by position in `hits`, not by score: the hybrid pass may have
+      // deliberately reordered them (exact matches first), and scores from the
+      // two sources aren't comparable anyway.
+      const hitPositions = new Map(hits.map((hit, index) => [hit.id, index]));
 
       const { bookmarks: results } = await Bookmark.loadMulti(ctx, {
         ids: hits.map((h) => h.id),
@@ -1207,7 +1250,10 @@ export const bookmarksAppRouter = router({
 
       switch (true) {
         case sortOrder === "relevance":
-          results.sort((a, b) => idToRank[b.id] - idToRank[a.id]);
+          results.sort(
+            (a, b) =>
+              (hitPositions.get(a.id) ?? 0) - (hitPositions.get(b.id) ?? 0),
+          );
           break;
         case sortOrder === "desc":
           results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());

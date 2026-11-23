@@ -9,7 +9,13 @@
  * That also means it degrades gracefully in semantic/hybrid search mode: a
  * conceptual match with no literal text overlap just renders unhighlighted,
  * exactly as it did before this feature existed — never a wrong highlight.
+ *
+ * The same word rules drive the server-side "exact hits first" ordering in
+ * `bookmarks.searchBookmarks`, so a row shown as an exact hit always has
+ * something to highlight.
  */
+
+import { searchQueryWords } from "@karakeep/shared/searchTextMatch";
 
 export interface QueryMatchSpan {
   text: string;
@@ -18,13 +24,6 @@ export interface QueryMatchSpan {
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/** Distinct words from the query, longest first so e.g. "insta" can't be
- *  pre-empted by a shorter word ("in") that happens to be its prefix. */
-function queryWords(query: string): string[] {
-  const words = new Set(query.trim().split(/\s+/).filter(Boolean));
-  return [...words].sort((a, b) => b.length - a.length);
 }
 
 function queryWordsRegExp(words: string[], flags: string): RegExp | null {
@@ -39,7 +38,7 @@ export function splitByQueryMatch(
   text: string,
   query: string,
 ): QueryMatchSpan[] {
-  const re = queryWordsRegExp(queryWords(query), "gi");
+  const re = queryWordsRegExp(searchQueryWords(query), "gi");
   if (!text || !re) return [{ text, matched: false }];
 
   const spans: QueryMatchSpan[] = [];
@@ -63,7 +62,7 @@ export function queryMatches(
   text: string | null | undefined,
   query: string,
 ): boolean {
-  const re = queryWordsRegExp(queryWords(query), "i");
+  const re = queryWordsRegExp(searchQueryWords(query), "i");
   return !!text && !!re && re.test(text);
 }
 
@@ -78,7 +77,7 @@ export function matchSnippet(
   query: string,
   contextChars = 50,
 ): string | null {
-  const re = queryWordsRegExp(queryWords(query), "i");
+  const re = queryWordsRegExp(searchQueryWords(query), "i");
   const match = re?.exec(text);
   if (!match) return null;
 

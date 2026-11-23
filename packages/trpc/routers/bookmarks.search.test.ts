@@ -442,6 +442,52 @@ describe("bookmark search modes", () => {
     );
   });
 
+  test<CustomTestContext>("lists literal matches before better-ranked conceptual ones", async ({
+    apiCallers,
+  }) => {
+    const [literal, fusedTop, semanticOnly] = await Promise.all(
+      ["literal", "top", "semantic"].map((text) =>
+        apiCallers[0].bookmarks.createBookmark({
+          type: BookmarkTypes.TEXT,
+          text,
+        }),
+      ),
+    );
+    await apiCallers[0].bookmarks.updateBookmark({
+      bookmarkId: literal.id,
+      note: "Sommerurlaub am See",
+    });
+    // Fusion alone puts `fusedTop` first: it is the best hit in both sources,
+    // while the literal match only appears in the full-text list.
+    searchMocks.search.mockResolvedValue({
+      hits: [
+        { id: fusedTop.id, score: 1 },
+        { id: literal.id, score: 0.4 },
+      ],
+      totalHits: 2,
+      processingTimeMs: 1,
+    });
+    searchMocks.vectorSearch.mockResolvedValue({
+      hits: [
+        { id: fusedTop.id, score: 0.95 },
+        { id: semanticOnly.id, score: 0.9 },
+      ],
+      processingTimeMs: 1,
+    });
+    mockEmbeddingInfra();
+
+    const result = await apiCallers[0].bookmarks.searchBookmarks({
+      text: "Sommerurlaub",
+      searchMode: "hybrid",
+    });
+
+    expect(result.bookmarks.map((bookmark) => bookmark.id)).toEqual([
+      literal.id,
+      fusedTop.id,
+      semanticOnly.id,
+    ]);
+  });
+
   test<CustomTestContext>("falls back to full-text search when hybrid infrastructure is unavailable", async ({
     apiCallers,
   }) => {
