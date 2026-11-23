@@ -90,6 +90,20 @@ jean.json
 # Generated, machine-local Graphify output
 /graphify-out/
 
+# Machine-local output of the research/tooling runs against this checkout
+# (activity logs, fetched feeds, captured pages, inbox drops, the cany
+# investigation directory). They stay on disk; nothing here is build input.
+# Anchored to the repository root so a future `checks/` or `capture/` inside a
+# package is not silently ignored.
+/build-activity.log
+/feed.json
+/usage.json
+/craft.json
+/capture/
+/checks/
+/inbox/
+/investigation.cany/
+
 # `next dev` regenerates these inside the Next app on every run (see
 # node_modules/next/dist/server/lib/generate-agent-files.js). They are machine
 # state, not source, and this repo already keeps its own curated AGENTS.md and
