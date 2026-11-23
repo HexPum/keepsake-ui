@@ -19,6 +19,13 @@ Entry template:
 **Prevention:** ...
 -->
 
+## 2026-11-17 — Search planning confused the global default with archive inclusion
+
+**What happened:** The recovered search plan initially described a separate Inbox/global navigation and later proposed that global search include archived items, with a visible “Not archived” chip. The user corrected this: Files is the current entry point; global search excludes archived items by default without a chip, and an explicit inclusion command such as `+archiviert` adds the archive. The user also specified hyphenated multiword tags and chip conversion on the following space, with two backward-delete presses to mark and remove the preceding chip.
+**Root cause:** Planning inferred product semantics from technical routes and proposed conventions instead of keeping navigation, collection scope, archive inclusion and existing tag style separate.
+**Consequence:** The specification needed correction before implementation; the agreed behavior is now recorded in `docs/plans/consistent-search-agent-team.md`. No application code was changed for this planning task.
+**Prevention:** Treat the user's confirmed interaction examples as acceptance tests. Distinguish “global”, “include archive” and “archive only”; show no chip for the default. Preserve existing legacy query semantics separately, and never assume that `is:archived` means archive inclusion or that new tag entry requires quoted spaces.
+
 ## 2026-11-09 — Search verification started with the wrong local runtime
 
 **What happened:** The first router-test run used the shell's Node 26, but the installed SQLite binding was built for Node 24. The build checker also could not find the project's required pnpm binary; the same missing-tool assumption had occurred in an earlier semantic-search run.
